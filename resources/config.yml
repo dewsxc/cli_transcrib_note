@@ -1,0 +1,18 @@
+root_dir: /Users/ychou/AINoteWorkspace/cli_transcrib_note
+secret: /Users/ychou/AINoteWorkspace/cli_doc_chat/resources/secret.yml
+ffmpeg: ffmpeg
+whisper_cpp_dir: /Users/ychou/AINoteWorkspace/whisper.cpp
+whisper_models_dir: /Users/ychou/AINoteWorkspace/mlx-examples/models
+
+graphs:
+  - name: NewsFeed
+    path: /Users/ychou/Library/Mobile Documents/iCloud~md~obsidian/Documents/NewsFeed2
+
+  - name: Note
+    path: /Users/ychou/Library/Mobile Documents/iCloud~md~obsidian/Documents/Note2
+
+  - name: Trading
+    path: /Users/ychou/Library/Mobile Documents/iCloud~com~logseq~logseq/Documents/Trading
+
+  - name: Test
+    path: /Users/ychou/AINoteWorkspace/cli_transcrib_note/news/Test
