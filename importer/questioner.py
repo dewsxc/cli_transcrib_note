@@ -8,6 +8,9 @@ class Querioner:
         self.chat = None
         self.qa_list = []
 
+    def setup(self):
+        pass
+
     def prepare_chat(self):
         pass
 
@@ -28,9 +31,12 @@ class Querioner:
 
 class ClaudeQuerioner(Querioner):
 
-    def __init__(self, key, model="claude-3-haiku-20240307"):
+    def __init__(self, key, model="claude-3-5-haiku-20241022"):
         super().__init__()
         self.key = key
+        self.model = model
+
+    def setup(self, model="claude-3-5-haiku-20241022"):
         self.model = model
 
     def prepare_chat(self):
@@ -60,8 +66,8 @@ class ClaudeQuerioner(Querioner):
 
 class ClaudeSrtSummary(ClaudeQuerioner):
 
-    def __init__(self, key, model="claude-3-haiku-20240307"):
-        super().__init__(key, model)
+    def __init__(self, key, model="claude-3-5-haiku-20241022"):
+        super().__init__(key, model=model)
         self.init_prompt = "我將上傳讀稿，請從讀稿中，使用繁體中文回覆以下請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '"
         self.content = None
 

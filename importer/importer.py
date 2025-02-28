@@ -1,5 +1,6 @@
+from argparse import Namespace
 
-from importer.data_setup import SourceInfo, YTChannalSrcInfo
+from importer.data_setup import SourceInfo, YTSrcInfo, YTChannalSrcInfo
 from importer.provider import AudioSourceProvider, ZoomVideoProvider, YTVideoProvider, YTChannelsLatestVideoProvider
 from importer.transcriber import AudioTranscriptor, YTTranscriptor
 from importer.recorder import SimpleRecorder
@@ -16,7 +17,7 @@ Output: From graph options.
 
 class AudioImporter:
 
-    def __init__(self, args):
+    def __init__(self, args:Namespace):
         self.args = args
         self.proj_setup = args.proj_setup
         self.output_helper = LogseqHelper(self.proj_setup)
@@ -37,13 +38,14 @@ class AudioImporter:
         for src in self.provider.get_src():
             
             if SimpleRecorder.check_if_had_read(self.args.proj_setup, src.get_main_id(), src.get_id()):
-                print("Already read: {} {} {}".format(src.get_main_id, src.get_id, src.get_src_fn()))
+                print("Already read: {} {} {}".format(src.get_main_id(), src.get_id(), src.get_src_fn()))
                 continue
 
             t = self.transcriptor_cls(self.args, src)
             t.start_transcribe()
             
             c = self.questioner_cls(self.proj_setup.anthropic_key)
+            c.setup(self.args.ai_model)
             c.prepare_chat()
             c.summarize_srt(self.get_prompt(src), src.srt_fp)
             
@@ -60,17 +62,23 @@ class AudioImporter:
     def save(self, page, qa_list, src:SourceInfo):
         if page:
             sum_md = MarkDownHelper.compose_summarize_md(
-                MarkDownHelper.compose_page_link(page, src.get_src_fn()),
+                self.get_title(page, src),
                 MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
             )
             self.output_helper.save_under_page(sum_md, page, src.srt_fp)
 
         else:
             sum_md = MarkDownHelper.compose_summarize_md(
-                MarkDownHelper.compose_file_link(src.get_src_fn()),
+                self.get_title(page, src),
                 MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
             )
             self.output_helper.save_under_diary(sum_md, src.srt_fp)
+
+    def get_title(self, page, src:SourceInfo):
+        if page:
+            return MarkDownHelper.compose_page_link(page, src.get_src_fn())
+        else:
+            return MarkDownHelper.compose_file_link(src.get_src_fn())
 
 
 """
@@ -99,12 +107,18 @@ class YTImporter(AudioImporter):
         self.transcriptor_cls = YTTranscriptor
         self.questioner_cls = ClaudeSrtSummary
 
+    def get_title(self, page, src:YTSrcInfo):
+        if page:
+            return MarkDownHelper.compose_page_video_link_md(page, src.get_src_fn(), src.video_url)
+        else:
+            return MarkDownHelper.compose_video_link_md(src.get_src_fn(), src.video_url)
+    
 
 """
 news
 """
 
-class DailyNewsImporter(AudioImporter):
+class DailyNewsImporter(YTImporter):
 
     def setup(self):
         self.provider = YTChannelsLatestVideoProvider(self.args)

@@ -104,7 +104,7 @@ class YTChannelsLatestVideoProvider(SourceProvider):
             
             if (datetime.today() - pt) / timedelta(hours=1) > 24:
                 print("Video publish at {} is not fresh.".format(pt))
-                return
+                continue
 
             yield YTChannalSrcInfo(
                 self.args.proj_setup.audio_dir,

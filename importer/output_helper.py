@@ -20,6 +20,10 @@ class MarkDownHelper:
     @classmethod
     def compose_page_link(cls, page, fn):
         return "[[{}/{}]]".format(page, fn)
+
+    @classmethod
+    def compose_video_link_md(cls, fn, link):
+        return "[[{}]] - [Link]({})".format(fn, link)
     
     @classmethod
     def compose_page_video_link_md(cls, page, fn, link):

@@ -19,7 +19,7 @@ def parse_args():
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.")
 
     # AI
-    p.add_argument('--ai-model', '-a', default="claude-3-haiku-20240307", help="Only implement Anthropic.")
+    p.add_argument('--ai-model', '-a', default="claude-3-haiku-20240307", choices=["claude-3-haiku-20240307", "claude-3-5-haiku-20241022"], help="Only implement Anthropic.")
 
 
     # Cmds
@@ -52,8 +52,7 @@ def parse_args():
 def main():
 
     args = parse_args()
-    print(args)
-    
+        
     importers = {
         'audio': AudioImporter,
         'zoom': ZoomRecordImporter,

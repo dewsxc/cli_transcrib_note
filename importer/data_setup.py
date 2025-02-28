@@ -46,18 +46,6 @@ class YTSrcInfo(SourceInfo):
         self.author = None
         self.title = None
     
-        # if channel_info:
-        #     self.channel_info = channel_info
-        #     self.author     = channel_info['uploader']
-
-        # if video_info:
-        #     self.video_info = video_info
-        #     if not self.author:
-        #         self.author     = video_info['uploader']
-        #     self.video_url  = video_info['url']
-        #     self.video_id   = video_info['id']
-        #     self.title      = video_info['title']
-        
         if channel_info:
             self.channel_info = channel_info
             self.channel_id = channel_info.get('channel_id')
@@ -79,18 +67,15 @@ class YTSrcInfo(SourceInfo):
             self.title      = video_info['title']
 
         markdown_chars = {
-            # "[": "\u005B",
-            # "]": "\u005D",
             "[": "",
             "]": "",
             "(": "\u0028",
             ")": "\u0029",
-            # "#": "\u0023",
             "#": "",
-            "|": "\u007C",
-            "\\": "\u005C"
+            "|": "",
+            "\\": "\u005C",
         }
-        self.title = re.sub(r'[\[\]()#|\\]', lambda m: markdown_chars[m.group()], self.title)
+        self.title = re.sub(r'[\[\]()#|\\]', lambda m: markdown_chars.get(m.group(), ""), self.title)
         self.src_fp = os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
         self.srt_fp = Path(self.src_fp).with_suffix('.srt').as_posix()
     
