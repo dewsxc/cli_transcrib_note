@@ -84,7 +84,9 @@ class YTChannelsLatestVideoProvider(SourceProvider):
 
             print("Checking: " + data.get('channel_name'))
 
-            url = 'https://www.youtube.com/@{}/videos'.format(data.get("username"))
+            is_live = data.get("is_live", False)
+
+            url = 'https://www.youtube.com/@{}/{}'.format(data.get("username"), "streams" if is_live else "videos")
 
             ydl_opts = {
                 'playlist_items': '1',

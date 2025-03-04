@@ -41,6 +41,10 @@
 - username: victormeigu
   channel_name: Victor美股投资
   question: 摘要所有品種的行情分析
+- username: edfx2020
+  channel_name: ED交易工作室
+  is_live: true
+  question: 摘要所有品種的行情分析
 # - username: laughingx777
 #   channel_name: 笑哥进阶频道
 #   question: 摘要文中的觀點以及敘述

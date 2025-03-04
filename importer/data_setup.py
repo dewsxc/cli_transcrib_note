@@ -66,6 +66,14 @@ class YTSrcInfo(SourceInfo):
             self.video_id   = video_info['id']
             self.title      = video_info['title']
 
+        self.title = self.remove_mk_symbol(self.title)
+        self.author = self.remove_mk_symbol(self.author)
+        self.src_fp = os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
+        self.srt_fp = Path(self.src_fp).with_suffix('.srt').as_posix()
+    
+    def remove_mk_symbol(self, s):
+        if not s:
+            return s
         markdown_chars = {
             "[": "",
             "]": "",
@@ -73,11 +81,9 @@ class YTSrcInfo(SourceInfo):
             ")": "\u0029",
             "#": "",
             "|": "",
-            "\\": "\u005C",
+            "\\": "",
         }
-        self.title = re.sub(r'[\[\]()#|\\]', lambda m: markdown_chars.get(m.group(), ""), self.title)
-        self.src_fp = os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
-        self.srt_fp = Path(self.src_fp).with_suffix('.srt').as_posix()
+        return re.sub(r'[\[\]()#|\\]', lambda m: markdown_chars.get(m.group(), ""), s)
     
     def get_main_id(self):
         return self.author

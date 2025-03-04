@@ -64,16 +64,17 @@ class ClaudeQuerioner(Querioner):
         return "".join(text_response)
 
 
+"""
+Sent init prompt and all data at once, will get better result.
+"""
+
 class ClaudeSrtSummary(ClaudeQuerioner):
 
     def __init__(self, key, model="claude-3-5-haiku-20241022"):
         super().__init__(key, model=model)
+        self.init_prompt_sent = False
         self.init_prompt = "我將上傳讀稿，請從讀稿中，使用繁體中文回覆以下請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '"
         self.content = None
-
-    def prepare_chat(self):
-        super().prepare_chat()
-        self.ask(self.init_prompt)
     
     def summarize_srt(self, q, srt_fp, with_ts=False):
         if not srt_fp:
@@ -84,9 +85,15 @@ class ClaudeSrtSummary(ClaudeQuerioner):
             with open(srt_fp) as src:
                 self.content = src.read()
         
-        prompt = q + '\n' + self.content
-        ans = self.ask_and_save(prompt)
-
+        prompts = []
+        if not self.init_prompt_sent:
+            prompts.append(self.init_prompt)
+        prompts.append(q)
+        prompts.append(self.content)
+        
+        ans = self.ask_and_save("\n".join(prompts))
+        self.init_prompt_sent = True
+        
         print("Question: " + q)
         print("Ans:" + ans)
         
