@@ -63,10 +63,20 @@ class YTVideoProvider(SourceProvider):
             'extractor_args': {'youtubetab': {'approximate_date': ['']}}
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(self.args.yt_link, download=False)
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(self.args.yt_link, download=False)
 
-        yield YTSrcInfo(self.args.proj_setup.audio_dir, video_info=info)
+            yield YTSrcInfo(self.args.proj_setup.audio_dir, video_info=info)
+        
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "members-only content" in err_msg:
+                print("The video is member-only, skip: {}".format(self.yt_link))
+                return
+            
+            elif "live event will begin in" in err_msg:
+                print("The live record is not ready: {}".format(self.yt_link))
 
 
 class YTChannelsLatestVideoProvider(SourceProvider):
@@ -94,13 +104,21 @@ class YTChannelsLatestVideoProvider(SourceProvider):
                 'extractor_args': {'youtubetab': {'approximate_date': ['']}}
             }
 
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+            try:
+                with YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "members-only content" in err_msg:
+                    print("The video is member-only, skip: {}".format(url))
+                    continue
                 
             first_v_info = info['entries'][0]
             ts = first_v_info.get('timestamp')
             if not ts:
-                ts = first_v_info.get('release_timestamp')
+                print("Video is not ready, skip: {} {}".format(first_v_info.get("title"), first_v_info.get("url")))
+                continue
 
             pt = datetime.fromtimestamp(ts)
             

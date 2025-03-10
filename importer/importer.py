@@ -43,7 +43,6 @@ class AudioImporter:
 
             t = self.transcriptor_cls(self.args, src)
             if not t.start_transcribe():
-                # TODO: Allow skip.
                 print("Skip: {} {}".format(src.get_main_id(), src.get_id()))
                 SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
                 continue

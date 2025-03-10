@@ -137,16 +137,8 @@ class YTTranscriptor(AudioTranscriptor):
                 'preferredcodec': audio_format.replace(".", ""),
             }],
         }
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                ydl.download([self.src.video_url])
-        
-        except DownloadError as e:
-            err_msg = str(e).lower()
-            if "members-only content" in err_msg:
-                print("The video {} is member-only".format(self.src.title))
-                return None
-            else:
-                raise e
+
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([self.src.video_url])
             
         return fp
