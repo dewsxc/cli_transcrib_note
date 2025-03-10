@@ -9,15 +9,18 @@ Source Info
 
 class SourceInfo:
 
-    def __init__(self, src_fp):
-        self.src_fp = src_fp
-        self.srt_fp = None
+    def __init__(self, src_fp=None):
+        self.set_src_fp_same_as_srt(src_fp)
+    
+    def set_src_fp_same_as_srt(self, fp):
+        self.src_fp = fp
+        self.srt_fp = Path(self.src_fp).with_suffix(".srt").as_posix() if fp else None
 
     def get_src_fn(self):
         return Path(self.src_fp).with_suffix("").name if self.src_fp else ""
     
-    def get_default_srt_fp(self):
-        return Path(self.src_fp).with_suffix(".srt").as_posix()
+    def get_srt_fn(self):
+        return Path(self.srt_fp).with_suffix("").name if self.srt_fp else ""
 
     def get_main_id(self):
         return Path(self.src_fp).name
@@ -28,9 +31,10 @@ class SourceInfo:
 
 class ZoomSrcInfo(SourceInfo):
 
-    def get_default_srt_fp(self):
+    def set_src_fp_same_as_srt(self, fp):
+        self.src_fp = fp
         p = Path(self.src_fp)
-        return os.path.join(p.parent.as_posix(), p.parent.name + ".srt")
+        self.srt_fp = os.path.join(p.parent.as_posix(), p.parent.name + ".srt")
 
     def get_main_id(self):
         return Path(self.src_fp).parent.name
@@ -68,9 +72,11 @@ class YTSrcInfo(SourceInfo):
 
         self.title = self.remove_mk_symbol(self.title)
         self.author = self.remove_mk_symbol(self.author)
-        self.src_fp = os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
-        self.srt_fp = Path(self.src_fp).with_suffix('.srt').as_posix()
-    
+
+        self.set_src_fp_same_as_srt(
+            os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
+        )
+
     def remove_mk_symbol(self, s):
         if not s:
             return s

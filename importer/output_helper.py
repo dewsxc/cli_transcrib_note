@@ -7,16 +7,6 @@ from setup import ServiceSetup
 from utils import content_utils
 
 
-"""
-iCloud will rename if fp is too long.
-Longer than 200 char, it is shorter than it claim.
-
-Removed dir path for 103 chars:
-from (103 chars): 美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣布对美投资千亿.md
-to (95 chars):    美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣.md
-"""
-
-
 class MarkDownHelper:
 
     @classmethod
@@ -89,7 +79,7 @@ class LogseqHelper:
             self.proj_setup.graph_dir,
             self.TRANSCRIPTIONS_DIR,
             datetime.today().strftime("%Y_%m_%d"),
-            Path(fp).with_suffix("").name + ".md",
+            Path(fp).with_suffix(".md").name,
         )
     
     def daily_journal_fp(self):
@@ -99,7 +89,59 @@ class LogseqHelper:
             datetime.today().strftime("%Y_%m_%d") + ".md",
         )
     
-    def save_under_page(self, sum, page, srt_fp):
+    def save_summary_under_page(self, page, qa_list, srt_fp):
+        md_fp = self.transcription_page_fp(page, srt_fp)
+        md_fp = self.icloud_fp_len_constrain(md_fp)
+        md_p = Path(md_fp)
+        
+        title = MarkDownHelper.compose_page_link(page, md_p.with_suffix("").name)
+        sum = MarkDownHelper.compose_summarize_md(
+            title,
+            MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
+        )
+
+        self.save_under_page(sum, page, srt_fp, md_fp=md_fp)
+
+    def save_summary_under_daily(self, qa_list, srt_fp):
+        md_fp = self.diary_transcription_fp(srt_fp)
+        md_fp = self.icloud_fp_len_constrain(md_fp)
+        md_p = Path(md_fp)
+        
+        title = MarkDownHelper.compose_file_link(md_p.with_suffix("").name)
+        sum = MarkDownHelper.compose_summarize_md(
+            title,
+            MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
+        )
+
+        self.save_under_diary(sum, srt_fp, md_fp=md_fp)
+
+    def save_summary_under_page_with_url(self, page, qa_list, url, srt_fp):
+        md_fp = self.transcription_page_fp(page, srt_fp)
+        md_fp = self.icloud_fp_len_constrain(md_fp)
+        md_p = Path(md_fp)
+
+        title = MarkDownHelper.compose_page_video_link_md(page, md_p.with_suffix("").name, url)
+        sum = MarkDownHelper.compose_summarize_md(
+            title,
+            MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
+        )
+
+        self.save_under_page(sum, page, srt_fp, md_fp=md_fp)
+
+    def save_summary_under_daily_with_url(self, qa_list, url, srt_fp):
+        md_fp = self.diary_transcription_fp(srt_fp)
+        md_fp = self.icloud_fp_len_constrain(md_fp)
+        md_p = Path(md_fp)
+        
+        title = MarkDownHelper.compose_video_link_md(md_p.with_suffix("").name, url)
+        sum = MarkDownHelper.compose_summarize_md(
+            title,
+            MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
+        )
+        
+        self.save_under_diary(sum, srt_fp, md_fp=md_fp)
+
+    def save_under_page(self, sum, page, srt_fp, md_fp=None):
         """
         Compose title by use case, not here.
         File: transcriptions/PageName/PageName___FileName.md
@@ -112,13 +154,13 @@ class LogseqHelper:
             src.write(sum)
         print("Save summary to: " + page_fp)
 
-        md_fp = self.transcription_page_fp(page, srt_fp)
+        md_fp = self.transcription_page_fp(page, srt_fp) if not md_fp else md_fp
         file_utils.make_dirs_for_fp(md_fp)
 
         content_utils.srt_to_md_list(srt_fp, md_fp)
         print("Saved: " + md_fp)
 
-    def save_under_diary(self, sum, srt_fp):
+    def save_under_diary(self, sum, srt_fp, md_fp=None):
         """
         File: transcriptions/2021_01_01/FileName.md
         """
@@ -130,7 +172,7 @@ class LogseqHelper:
             src.write(sum)
         print("Save summary to: " + journal_fp)
 
-        md_fp = self.diary_transcription_fp(srt_fp)
+        md_fp = self.diary_transcription_fp(srt_fp)  if not md_fp else md_fp
         file_utils.make_dirs_for_fp(md_fp)
 
         content_utils.srt_to_md_list(srt_fp, md_fp)
@@ -139,3 +181,25 @@ class LogseqHelper:
     @classmethod
     def compose_fn_under_page(cls, page, fn):
         return "{}___{}".format(page, fn) + '.md'
+    
+    @classmethod
+    def icloud_fp_len_constrain(cls, fp):
+        """
+        iCloud will rename if fp is too long.
+        Longer than 200 char, it is shorter than it claim.
+
+        Removed dir path for 103 chars:
+        from (103 chars): 美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣布对美投资千亿.md
+        to (95 chars):    美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣.md
+        """
+        if not fp:
+            return fp
+        l = len(fp)
+        if l <= 192:
+            return fp
+        
+        print("Path too long, trimming...")
+        p = Path(fp)
+        ext = p.suffix
+        
+        return fp[:192 - len(ext)] + ext

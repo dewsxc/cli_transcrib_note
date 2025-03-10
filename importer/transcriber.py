@@ -7,6 +7,7 @@ from setup import ServiceSetup
 from importer.provider import SourceInfo, YTSrcInfo
 
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 import mlx_whisper
 from mlx_whisper import writers
 
@@ -21,8 +22,11 @@ class AudioTranscriptor():
         result = True
         if self.pre_process():  # True if need transcription.
             result = self.__transcribe()
+        else:
+            result = False
         self.post_process()
         return result
+
 
     def pre_process(self):
         """ 
@@ -44,9 +48,7 @@ class AudioTranscriptor():
         if not self.src_info.src_fp or not os.path.exists(self.src_info.src_fp):
             raise Exception("Source is not exists: " + str(self.src_info.src_fp))
         
-        srt_fp = self.src_info.get_default_srt_fp()
         tmp = None
-        
         try:
             if not self.src_info.src_fp.endswith('.wav'):
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
@@ -54,11 +56,9 @@ class AudioTranscriptor():
             self.use_mlx(
                 self.args.proj_setup,
                 tmp if tmp else self.src_info.src_fp,
-                srt_fp,
+                self.src_info.srt_fp,
                 model_size=self.args.model_size,
             )
-
-            self.src_info.srt_fp = srt_fp
 
             if tmp and os.path.exists(tmp):
                 os.remove(tmp)
@@ -73,7 +73,8 @@ class AudioTranscriptor():
         return True
 
     def post_process(self):
-        content_utils.s_to_t(self.src_info.srt_fp)
+        if self.src_info.srt_fp and os.path.exists(self.src_info.srt_fp):
+            content_utils.s_to_t(self.src_info.srt_fp)
     
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.
@@ -107,8 +108,9 @@ class YTTranscriptor(AudioTranscriptor):
         if should_proceed:
             self.src.src_fp = self.download_lowest_quality_audio() # Should be .wav
         
-            if not os.path.exists(self.src.src_fp):
-                raise Exception("===== Donwload failed. =====")
+            if not self.src.src_fp or not os.path.exists(self.src.src_fp):
+                print("===== Donwload failed. =====")
+                should_proceed = False
 
         return should_proceed
 
@@ -135,7 +137,16 @@ class YTTranscriptor(AudioTranscriptor):
                 'preferredcodec': audio_format.replace(".", ""),
             }],
         }
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([self.src.video_url])
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([self.src.video_url])
         
+        except DownloadError as e:
+            err_msg = str(e).lower()
+            if "members-only content" in err_msg:
+                print("The video {} is member-only".format(self.src.title))
+                return None
+            else:
+                raise e
+            
         return fp

@@ -38,12 +38,17 @@ class AudioImporter:
         for src in self.provider.get_src():
             
             if SimpleRecorder.check_if_had_read(self.args.proj_setup, src.get_main_id(), src.get_id()):
-                print("Already read: {} {} {}".format(src.get_main_id(), src.get_id(), src.get_src_fn()))
+                print("Already read: {} {}".format(src.get_main_id(), src.get_id()))
                 continue
 
             t = self.transcriptor_cls(self.args, src)
-            t.start_transcribe()
+            if not t.start_transcribe():
+                # TODO: Allow skip.
+                print("Skip: {} {}".format(src.get_main_id(), src.get_id()))
+                SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
+                continue
             
+            # TODO: Write a func for init and return AI instance instead.
             c = self.questioner_cls(self.proj_setup.anthropic_key)
             c.setup(self.args.ai_model)
             c.prepare_chat()
@@ -61,24 +66,9 @@ class AudioImporter:
 
     def save(self, page, qa_list, src:SourceInfo):
         if page:
-            sum_md = MarkDownHelper.compose_summarize_md(
-                self.get_title(page, src),
-                MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
-            )
-            self.output_helper.save_under_page(sum_md, page, src.srt_fp)
-
+            self.output_helper.save_summary_under_page(page, qa_list, src.srt_fp)
         else:
-            sum_md = MarkDownHelper.compose_summarize_md(
-                self.get_title(page, src),
-                MarkDownHelper.compose_summarize_from_qa_lsit_md(qa_list)
-            )
-            self.output_helper.save_under_diary(sum_md, src.srt_fp)
-
-    def get_title(self, page, src:SourceInfo):
-        if page:
-            return MarkDownHelper.compose_page_link(page, src.get_src_fn())
-        else:
-            return MarkDownHelper.compose_file_link(src.get_src_fn())
+            self.output_helper.save_summary_under_daily(qa_list, src.srt_fp)
 
 
 """
@@ -106,13 +96,13 @@ class YTImporter(AudioImporter):
         self.provider = YTVideoProvider(self.args)
         self.transcriptor_cls = YTTranscriptor
         self.questioner_cls = ClaudeSrtSummary
-
-    def get_title(self, page, src:YTSrcInfo):
-        if page:
-            return MarkDownHelper.compose_page_video_link_md(page, src.get_src_fn(), src.video_url)
-        else:
-            return MarkDownHelper.compose_video_link_md(src.get_src_fn(), src.video_url)
     
+    def save(self, page, qa_list, src:YTSrcInfo):
+        if page:
+            self.output_helper.save_summary_under_page_with_url(page, qa_list,src.video_url, src.srt_fp)
+        else:
+            self.output_helper.save_summary_under_daily_with_url(qa_list, src.video_url, src.srt_fp)
+
 
 """
 news
