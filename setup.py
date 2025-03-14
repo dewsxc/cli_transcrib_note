@@ -53,7 +53,7 @@ class ServiceSetup():
 
     @property
     def graph_dir(self):
-        return self.current_graph.get('path')
+        return self.abs_path(self.current_graph.get('path'))
     
     def transcript_fp(self, fn):
         return os.path.join(self.graph_dir, 'transcriptions', fn)
@@ -62,7 +62,7 @@ class ServiceSetup():
         self.current_graph = next( graph for graph in self.graphs_config if graph.get('name') == graph_name )
 
     def get_dir_for_whisper_model(self, name):
-        return os.path.join(self.whisper_models_dir, name)
+        return self.abs_path(os.path.join(self.whisper_models_dir, name))
 
     def load(self):
         if not self.config_fp:
@@ -70,17 +70,20 @@ class ServiceSetup():
         if not os.path.exists(self.config_fp):
             print("Config not exists: " + self.config_fp)
             return
-
+        
+        self.config_fp = self.abs_path(self.config_fp)
         with open(self.config_fp, 'r') as f:
             self.config = yaml.load(f, Loader=yaml.BaseLoader)
 
-        with open(self.config.get('secret'), 'r') as f:
+        secret_fp = self.abs_path(self.config.get('secret'))
+        with open(secret_fp, 'r') as f:
             self.secret = yaml.load(f, Loader=yaml.BaseLoader)
 
-        self.root_dir = self.config.get("root_dir")
+        self.root_dir = self.abs_path(self.config.get("root_dir"))
         self.ffmpeg = self.config.get("ffmpeg")
-        self.whisper_cpp_dir = self.config.get("whisper_cpp_dir")
-        self.whisper_models_dir = self.config.get("whisper_models_dir")
+        self.whisper_cpp_dir = self.abs_path(self.config.get("whisper_cpp_dir"))
+        self.whisper_models_dir = self.abs_path(self.config.get("whisper_models_dir"))
+        
         self.graphs_config = self.config.get('graphs')
         self.current_graph = self.graphs_config[0]
 
@@ -100,3 +103,6 @@ class ServiceSetup():
     
     def get_record_for(self, main_id):
         return os.path.join(self.stamp_dir, main_id)
+    
+    def abs_path(self, fp):
+        return os.path.abspath(os.path.expanduser(fp))

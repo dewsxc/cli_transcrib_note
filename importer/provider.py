@@ -83,7 +83,7 @@ class YTChannelsLatestVideoProvider(SourceProvider):
 
     def __init__(self, args):
         super().__init__(args)
-        self.monitor_list_path = args.monitor_list_path
+        self.monitor_list_path = os.path.abspath(os.path.expanduser(args.monitor_list_path))
 
     def get_src(self)-> Generator[YTChannalSrcInfo]:
 
