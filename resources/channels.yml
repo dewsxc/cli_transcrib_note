@@ -34,6 +34,10 @@
   question: 摘要所有品種的行情分析
 - username: cyclestudiesBTC
   channel_name: 百萬Eric
+  is_live: true
+  question: 摘要所有品種的行情分析
+- username: cyclestudiesBTC
+  channel_name: 百萬Eric
   question: 摘要所有品種的行情分析
 - username: GongYouChai
   channel_name: 龔有柴-比特币老玩家

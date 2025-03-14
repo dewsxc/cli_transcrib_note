@@ -34,13 +34,13 @@ def parse_args():
     yt_args.add_argument('yt_link', help="YT link.")
 
     # Audio or Video
-    audio_args = cmd.add_parser('audio', help="Transcrobe from Audio or Video path, support director.")
+    audio_args = cmd.add_parser('audio', help="Transcrobe from Audio or Video path, support directory.")
     audio_args.add_argument('src_fp', help="Source file path.")
     audio_args.add_argument('--ext', '-t', default='.mp4', help="Audio or Video file extension.")
 
     # Zoom
     zoom_args = cmd.add_parser('zoom', help="Transcribing from Zoom record.")
-    zoom_args.add_argument('src_fp', help="Source file path.")
+    zoom_args.add_argument('src_fp', help="Source file path or directory, it will find matched file recursively.")
     zoom_args.add_argument('--ext', '-t', default='.mp4', help="Audio or Video file extension.")
 
     args = p.parse_args()

@@ -81,15 +81,16 @@ class YTSrcInfo(SourceInfo):
         if not s:
             return s
         markdown_chars = {
-            "[": "",
-            "]": "",
+            "[": " ",
+            "]": " ",
             "(": "\u0028",
             ")": "\u0029",
             "#": "",
-            "|": "",
-            "\\": "",
+            "|": " ",
+            "\\": " ",
+            "/": " ",
         }
-        return re.sub(r'[\[\]()#|\\]', lambda m: markdown_chars.get(m.group(), ""), s)
+        return re.sub(r'[\[\]()#|\\/]', lambda m: markdown_chars.get(m.group(), ""), s)
     
     def get_main_id(self):
         return self.author
