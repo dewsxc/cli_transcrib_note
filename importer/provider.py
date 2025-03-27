@@ -20,9 +20,9 @@ class SourceProvider:
         # Get source info before go, so we can check first.
         pass
 
-    def get_src(self, src: SourceInfo):
+    def get_src(self, src: SourceInfo) -> bool:
         # Get source from download or somewhere else.
-        pass
+        return os.path.exists(src.src_fp)
 
 
 class AudioSourceProvider(SourceProvider):

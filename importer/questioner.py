@@ -58,7 +58,7 @@ class ClaudeQuestioner(Querioner):
             max_tokens=3000,
             temperature=0.0,
             system=system_role,
-            messages=self.wrap_conversation(system_role=system_role, next_q=prompt)
+            messages=self.wrap_conversation(next_q=prompt)
         )
 
         ans = "".join([ chunk.text for chunk in responses.content ])

@@ -44,22 +44,21 @@ class AudioImporter:
                 print("Already read: {} {}".format(src.get_main_id(), src.get_id()))
                 continue
             
-            if not self.provider.get_src(src):
-                continue
-
-            if not self.transcriptor.start_transcribe(src):
-                print("Skip transcribing: {}".format(src.src_fp))
-
             if not src.is_srt_exists():
-                print("SRT not exists: {}".format(src.srt_fp))
-                continue
+
+                if not self.provider.get_src(src):
+                    continue
+
+                if not self.transcriptor.start_transcribe(src):
+                    print("Skip transcribing: {}".format(src.src_fp))
+                    continue
 
             self.questioner.summarize_srt(self.get_prompt(src), src.srt_fp)
-            self.questioner.close_conversation()
 
             self.save(self.args.page, self.questioner.qa_list, src)
-
             SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
+
+            self.questioner.close_conversation()
     
     def get_prompt(self, src):
         """
