@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 from utils import content_utils
 from utils import file_utils
@@ -28,9 +27,6 @@ class AudioTranscriptor():
     def pre_process(self):
         """ 
         Return True will execute __transcribe()
-        Check:
-            .srt exists
-            Transcription record.
         """
         # TODO: Check over write.
         if self.src_info.srt_fp and os.path.exists(self.src_info.srt_fp):
@@ -78,7 +74,7 @@ class AudioTranscriptor():
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.
 
-        model_dir = proj_setup.get_dir_for_whisper_model(model_size)
+        model_dir = proj_setup.get_dir_for_mlx_whisper_model(model_size)
         if not os.path.exists(model_dir):
             raise Exception("Unkonwn model: " + str(model_dir))
         

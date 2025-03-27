@@ -1,8 +1,8 @@
-root_dir: ~/AINoteWorkspace/cli_transcrib_note
+work_dir: ~/AINoteWorkspace/cli_transcrib_note
 secret: ~/AINoteWorkspace/cli_doc_chat/resources/secret.yml
 ffmpeg: ffmpeg
 whisper_cpp_dir: ~/AINoteWorkspace/whisper.cpp
-whisper_models_dir: ~/AINoteWorkspace/mlx-examples/models
+mlx_whisper_models_dir: ~/AINoteWorkspace/mlx-examples/models
 
 graphs:
   - name: NewsFeed

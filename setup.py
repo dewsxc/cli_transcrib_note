@@ -7,7 +7,7 @@ class ServiceSetup():
     
     def __init__(self, config_fp):
         self.config_fp = config_fp
-        self.root_dir = None
+        self.work_dir = None
         self.secret = None
         self.graphs_config = None
         self.current_graph = None
@@ -25,11 +25,11 @@ class ServiceSetup():
 
     @property
     def audio_dir(self):
-        return os.path.join(self.root_dir, "tmp", "audio")
+        return os.path.join(self.work_dir, "tmp", "audio")
 
     @property
     def stamp_dir(self):
-        return os.path.join(self.root_dir, "tmp", "stamp")
+        return os.path.join(self.work_dir, "tmp", "stamp")
 
     @property
     def openai_key(self):
@@ -61,8 +61,8 @@ class ServiceSetup():
     def change_to_graph(self, graph_name):
         self.current_graph = next( graph for graph in self.graphs_config if graph.get('name') == graph_name )
 
-    def get_dir_for_whisper_model(self, name):
-        return self.abs_path(os.path.join(self.whisper_models_dir, name))
+    def get_dir_for_mlx_whisper_model(self, name):
+        return self.abs_path(os.path.join(self.mlx_whisper_models_dir, name))
 
     def load(self):
         if not self.config_fp:
@@ -79,10 +79,10 @@ class ServiceSetup():
         with open(secret_fp, 'r') as f:
             self.secret = yaml.load(f, Loader=yaml.BaseLoader)
 
-        self.root_dir = self.abs_path(self.config.get("root_dir"))
+        self.work_dir = self.abs_path(self.config.get("work_dir"))
         self.ffmpeg = self.config.get("ffmpeg")
         self.whisper_cpp_dir = self.abs_path(self.config.get("whisper_cpp_dir"))
-        self.whisper_models_dir = self.abs_path(self.config.get("whisper_models_dir"))
+        self.mlx_whisper_models_dir = self.abs_path(self.config.get("mlx_whisper_models_dir"))
         
         self.graphs_config = self.config.get('graphs')
         self.current_graph = self.graphs_config[0]
