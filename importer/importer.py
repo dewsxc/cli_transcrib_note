@@ -1,11 +1,12 @@
 from argparse import Namespace
 
+from setup import ServiceSetup
 from importer.data_setup import SourceInfo, YTSrcInfo, YTChannalSrcInfo
 from importer.provider import AudioSourceProvider, ZoomVideoProvider, YTVideoProvider, YTChannelsLatestVideoProvider
 from importer.transcriber import AudioTranscriptor, YTTranscriptor
 from importer.recorder import SimpleRecorder
 from importer.questioner import ClaudeSrtSummary
-from importer.output_helper import LogseqHelper, MarkDownHelper
+from importer.output_helper import LogseqHelper
 
 
 """
@@ -19,7 +20,7 @@ class AudioImporter:
 
     def __init__(self, args:Namespace):
         self.args = args
-        self.proj_setup = args.proj_setup
+        self.proj_setup: ServiceSetup = args.proj_setup
         self.output_helper = LogseqHelper(self.proj_setup)
         self.proj_setup.change_to_graph(self.args.graph)
 
@@ -27,33 +28,36 @@ class AudioImporter:
         
     def setup(self):
         """
-        Contain differences of each instance.
+        Override to customize source, transcripor and AI model service.
         """
         self.provider = AudioSourceProvider(self.args)
-        self.transcriptor_cls = AudioTranscriptor
-        self.questioner_cls = ClaudeSrtSummary
+        self.transcriptor = AudioTranscriptor(self.args)
+        self.questioner = ClaudeSrtSummary(self.proj_setup)
     
     def start_import(self):
 
-        for src in self.provider.get_src():
+        self.questioner.prepare(self.args.ai_model)
+
+        for src in self.provider.get_info():
             
             if SimpleRecorder.check_if_had_read(self.args.proj_setup, src.get_main_id(), src.get_id()):
                 print("Already read: {} {}".format(src.get_main_id(), src.get_id()))
                 continue
-
-            t = self.transcriptor_cls(self.args, src)
-            if not t.start_transcribe():
-                print("Skip: {} {}".format(src.get_main_id(), src.get_id()))
-                SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
+            
+            if not self.provider.get_src(src):
                 continue
-            
-            # TODO: Write a func for init and return AI instance instead.
-            c = self.questioner_cls(self.proj_setup.anthropic_key)
-            c.setup(self.args.ai_model)
-            c.prepare_chat()
-            c.summarize_srt(self.get_prompt(src), src.srt_fp)
-            
-            self.save(self.args.page, c.qa_list, src)
+
+            if not self.transcriptor.start_transcribe(src):
+                print("Skip transcribing: {}".format(src.src_fp))
+
+            if not src.is_srt_exists():
+                print("SRT not exists: {}".format(src.srt_fp))
+                continue
+
+            self.questioner.summarize_srt(self.get_prompt(src), src.srt_fp)
+            self.questioner.close_conversation()
+
+            self.save(self.args.page, self.questioner.qa_list, src)
 
             SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
     
@@ -81,8 +85,8 @@ class ZoomRecordImporter(AudioImporter):
 
     def setup(self):
         self.provider = ZoomVideoProvider(self.args)
-        self.transcriptor_cls = AudioTranscriptor
-        self.questioner_cls = ClaudeSrtSummary
+        self.transcriptor = AudioTranscriptor(self.args)
+        self.questioner = ClaudeSrtSummary(self.proj_setup)
 
 
 """
@@ -93,8 +97,8 @@ class YTImporter(AudioImporter):
 
     def setup(self):
         self.provider = YTVideoProvider(self.args)
-        self.transcriptor_cls = YTTranscriptor
-        self.questioner_cls = ClaudeSrtSummary
+        self.transcriptor = YTTranscriptor(self.args)
+        self.questioner = ClaudeSrtSummary(self.proj_setup)
     
     def save(self, page, qa_list, src:YTSrcInfo):
         if page:
@@ -111,10 +115,8 @@ class DailyNewsImporter(YTImporter):
 
     def setup(self):
         self.provider = YTChannelsLatestVideoProvider(self.args)
-        self.transcriptor_cls = YTTranscriptor
-        self.questioner_cls = ClaudeSrtSummary
-
-        self.proj_setup.change_to_graph("NewsFeed")
+        self.transcriptor = YTTranscriptor(self.args)
+        self.questioner = ClaudeSrtSummary(self.proj_setup)
 
     def get_prompt(self, src:YTChannalSrcInfo):
         return src.question

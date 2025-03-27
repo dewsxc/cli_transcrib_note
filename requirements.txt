@@ -4,8 +4,8 @@ zhconv
 pyyaml
 
 # AI
-google-api-python-client
-google-cloud-aiplatform >= 1.38
+# google-api-python-client
+# google-cloud-aiplatform >= 1.38
 anthropic
 
 mlx-whisper

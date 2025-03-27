@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 from collections.abc import Generator
 
@@ -10,14 +11,17 @@ import yaml
 
 
 class SourceProvider:
-    # Should be constrainted as iterable.
+
     def __init__(self, args):
+        # Take your parameters from args.
         self.args = args
     
-    def get_src(self) -> Generator[SourceInfo]:
+    def get_info(self) -> Generator[SourceInfo]:
+        # Get source info before go, so we can check first.
         pass
 
-    def clean_up(self):
+    def get_src(self, src: SourceInfo):
+        # Get source from download or somewhere else.
         pass
 
 
@@ -28,7 +32,7 @@ class AudioSourceProvider(SourceProvider):
         self.src_fp = args.src_fp
         self.ext = args.ext if args.ext else '.wav' # Path is dir need assign ext.
         
-    def get_src(self)-> Generator[SourceInfo]:
+    def get_info(self)-> Generator[SourceInfo]:
         if os.path.isdir(self.src_fp):
             for fn in os.listdir(self.src_fp):
                 if fn.endswith(self.ext):
@@ -36,12 +40,10 @@ class AudioSourceProvider(SourceProvider):
         else:
             yield SourceInfo(src_fp=self.src_fp)
 
-        self.clean_up()
-
 
 class ZoomVideoProvider(AudioSourceProvider):
     
-    def get_src(self)-> Generator[ZoomSrcInfo]:
+    def get_info(self)-> Generator[ZoomSrcInfo]:
         if os.path.isdir(self.src_fp):
             for fp in file_utils.get_all_file_with_ext(self.src_fp, '.mp4'):
                 yield ZoomSrcInfo(fp)
@@ -55,11 +57,10 @@ class YTVideoProvider(SourceProvider):
         super().__init__(args)
         self.yt_link = args.yt_link
 
-    def get_src(self)-> Generator[YTSrcInfo]:
+    def get_info(self)-> Generator[YTSrcInfo]:
 
         ydl_opts = {
             'playlist_items': '1',
-            # 'extract_flat': 'in_playlist',
             'extractor_args': {'youtubetab': {'approximate_date': ['']}}
         }
 
@@ -72,20 +73,65 @@ class YTVideoProvider(SourceProvider):
         except Exception as e:
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
-                print("The video is member-only, skip: {}".format(self.yt_link))
-                return
-            
+                print("The video is member-only, skip: {}".format(self.yt_link))            
             elif "live event will begin in" in err_msg:
                 print("The live record is not ready: {}".format(self.yt_link))
+            return
+        
+    def get_src(self, src: YTSrcInfo):
+        src.src_fp = self.download_lowest_quality_audio(src)
+        if not src.src_fp or not os.path.exists(src.src_fp):
+            print("===== Donwload failed. =====")
+            return False
+        return True
+
+    def download_lowest_quality_audio(self, src: YTSrcInfo, audio_format='.wav'):
+
+        fp = src.src_fp
+
+        if os.path.exists(fp):
+            print("Audio exists: " + fp)
+            return fp
+        
+        # The ydl will transform audio format as you assign, if your fp has ext in path, ydl will append ext directly.
+        # Like input: aaa.wav
+        # In result: aaa.wav.wav
+        no_ext_fp = Path(fp).with_suffix("").as_posix()
+
+        ydl_opts = {
+            'outtmpl': no_ext_fp,
+            'format': 'worstaudio/worst',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': audio_format.replace(".", ""), # Remove '.' for user to keep consistency of meaning.
+            }],
+        }
+
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([src.video_url])
+
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "members-only content" in err_msg:
+                print("The video is member-only, skip: {}".format(src.video_url))
+                return None
+            elif "live event will begin in" in err_msg:
+                print("The live record is not ready: {}".format(src.video_url))
+                return None
+            else:
+                raise e
+            
+        return fp
 
 
-class YTChannelsLatestVideoProvider(SourceProvider):
+class YTChannelsLatestVideoProvider(YTVideoProvider):
 
     def __init__(self, args):
-        super().__init__(args)
+        self.args = args
         self.monitor_list_path = os.path.abspath(os.path.expanduser(args.monitor_list_path))
 
-    def get_src(self)-> Generator[YTChannalSrcInfo]:
+    def get_info(self)-> Generator[YTChannalSrcInfo]:
 
         with open(self.monitor_list_path, 'r') as f:
             monitor_list = yaml.load(f, Loader=yaml.BaseLoader)

@@ -1,5 +1,14 @@
 # CLI Transcription and Summarization Tool
 
+This project meant to scan all channels I monitored on Youtube and sent summarize into my Logseq or Obsidian knoledge base, so that I won't need to spend lots of time for listening, just read summarize and search I need in transcription, life saver.
+
+The output files I put on iCloud, so I can read it on my iPhone, recommand use Obsidian as frontend reader, the sync and read experience better than Loqseg, but Logseq is greater than Obsidian on manage knowledge, so I keep naming style and path for Loqseq.
+
+It can input audio or video or zoom record as well.
+
+This project is still on refactoring, you will see lots options still on implement like support Gemini or Whisper.cpp, but it can work with MLX and Claude option, the combination is best for saving money and work on Macbook air.
+
+
 ## Overview
 
 This CLI tool provides a comprehensive solution for transcribing and summarizing audio and video content from multiple sources, including:
@@ -36,6 +45,10 @@ The tool supports multiple features:
   - Claude 3.5 Haiku
   - Claude 3.5 Sonnet
 
+The most suitable in Traditional Chinese context is Claude 3 Haiku, fast, cheap and good quality, but it must sent all prompt, include init prompt, transcription at once, if not, the quality drop very crazy.
+The Claude 3.5 Haiku is good quality without any tricks but lack of detail, the Gemini is too creative for summarizing, ChatGPT is too expensive considered quality.
+
+
 ### Output Options
 - Save summaries to specific pages
 - Multiple graph destinations:
@@ -51,14 +64,6 @@ The tool supports multiple features:
 - FFmpeg
 - Whisper.cpp (optional)
 
-### Dependencies
-- yt-dlp
-- zhconv
-- pyyaml
-- google-api-python-client
-- google-cloud-aiplatform
-- anthropic
-- mlx-whisper
 
 ## Installation
 

@@ -16,10 +16,10 @@ def parse_args():
     # Whisper
     p.add_argument('--speech-to-text', '-t', default='mlx-whisper', choices=["mlx-whisper", "whisper.cpp"], help="Choose whisper models for trascribing.")
     p.add_argument('--model-size', '-s', default="small", choices=["small", "medium", "large"], help="Choose model size.")
-    p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.")
+    p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
     # AI
-    p.add_argument('--ai-model', '-a', default="claude-3-5-haiku-20241022", choices=["claude-3-haiku-20240307", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"], help="Only implement Anthropic.")
+    p.add_argument('--ai-model', '-a', default="claude-3-haiku-20240307", choices=["claude-3-haiku-20240307", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"], help="Only implement Anthropic.")
 
 
     # Cmds
@@ -41,7 +41,6 @@ def parse_args():
     # Zoom
     zoom_args = cmd.add_parser('zoom', help="Transcribing from Zoom record.")
     zoom_args.add_argument('src_fp', help="Source file path or directory, it will find matched file recursively.")
-    zoom_args.add_argument('--ext', '-t', default='.mp4', help="Audio or Video file extension.")
 
     args = p.parse_args()
     args.proj_setup = ServiceSetup(args.setup)

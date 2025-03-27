@@ -4,21 +4,19 @@ from pathlib import Path
 from utils import content_utils
 from utils import file_utils
 from setup import ServiceSetup
-from importer.provider import SourceInfo, YTSrcInfo
+from importer.provider import SourceInfo
 
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import DownloadError
 import mlx_whisper
 from mlx_whisper import writers
 
 
 class AudioTranscriptor():
 
-    def __init__(self, args, src:SourceInfo):
+    def __init__(self, args):
         self.args = args
-        self.src_info = src
 
-    def start_transcribe(self):
+    def start_transcribe(self, src:SourceInfo):
+        self.src_info = src
         result = True
         if self.pre_process():  # True if need transcription.
             result = self.__transcribe()
@@ -26,7 +24,6 @@ class AudioTranscriptor():
             result = False
         self.post_process()
         return result
-
 
     def pre_process(self):
         """ 
@@ -53,11 +50,13 @@ class AudioTranscriptor():
             if not self.src_info.src_fp.endswith('.wav'):
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
 
+            # TODO Add Whisper.cpp support.
             self.use_mlx(
                 self.args.proj_setup,
                 tmp if tmp else self.src_info.src_fp,
                 self.src_info.srt_fp,
                 model_size=self.args.model_size,
+                lang=self.args.lang,
             )
 
             if tmp and os.path.exists(tmp):
@@ -98,47 +97,7 @@ class AudioTranscriptor():
 
 class YTTranscriptor(AudioTranscriptor):
 
-    def __init__(self, args, src:YTSrcInfo):
-        super().__init__(args, src)
-        self.src = src
-    
-    def pre_process(self):
-        should_proceed = super().pre_process()
-        
-        if should_proceed:
-            self.src.src_fp = self.download_lowest_quality_audio() # Should be .wav
-        
-            if not self.src.src_fp or not os.path.exists(self.src.src_fp):
-                print("===== Donwload failed. =====")
-                should_proceed = False
-
-        return should_proceed
-
     def post_process(self):
         super().post_process()
         if self.src_info.src_fp and os.path.exists(self.src_info.src_fp):
             os.remove(self.src_info.src_fp)
-    
-    def download_lowest_quality_audio(self, audio_format='.wav'):
-
-        fp = self.src.src_fp
-
-        if os.path.exists(fp):
-            print("Audio exists: " + fp)
-            return fp
-        
-        no_ext_fp = Path(fp).with_suffix("").as_posix()
-
-        ydl_opts = {
-            'outtmpl': no_ext_fp,  # 'e:/python/downloadedsongs/%(title)s.%(ext)s',
-            'format': 'worstaudio/worst',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': audio_format.replace(".", ""),
-            }],
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([self.src.video_url])
-            
-        return fp

@@ -27,6 +27,9 @@ class SourceInfo:
 
     def get_id(self):
         return "1"
+    
+    def is_srt_exists(self):
+        return self.srt_fp and os.path.exists(self.srt_fp)
 
 
 class ZoomSrcInfo(SourceInfo):
@@ -90,7 +93,7 @@ class YTSrcInfo(SourceInfo):
             "\\": " ",
             "/": " ",
         }
-        return re.sub(r'[\[\]()#|\\/]', lambda m: markdown_chars.get(m.group(), ""), s)
+        return re.sub(r'[\[\]()#|\\/]', lambda m: markdown_chars.get(m.group(), ""), s).strip()
     
     def get_main_id(self):
         return self.author

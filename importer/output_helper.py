@@ -186,11 +186,7 @@ class LogseqHelper:
     def icloud_fp_len_constrain(cls, fp):
         """
         iCloud will rename if fp is too long.
-        Longer than 200 char, it is shorter than it claim.
-
-        Removed dir path for 103 chars:
-        from (103 chars): 美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣布对美投资千亿.md
-        to (95 chars):    美投侃新闻 - 美国经济即将崩塌？GDP竟要收缩3%！英伟达出事了，新加坡政府抓人坐实中转站传言；川普破灭希望，加墨关税没商量；比特币战略储备“一日游”；OPEC为何决定增产？台积电宣.md
+        Longer than 200 chars, include extention, it will rename and keep fp under 198 chars, it is shorter than it claim.
         """
         if not fp:
             return fp
