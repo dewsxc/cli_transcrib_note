@@ -74,6 +74,8 @@ class YTVideoProvider(SourceProvider):
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
                 print("The video is member-only, skip: {}".format(self.yt_link))            
+            elif "channel's members" in err_msg:
+                print("The video is member-only, skip: {}".format(self.yt_link))
             elif "live event will begin in" in err_msg:
                 print("The live record is not ready: {}".format(self.yt_link))
             return
@@ -114,6 +116,9 @@ class YTVideoProvider(SourceProvider):
         except Exception as e:
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
+                print("The video is member-only, skip: {}".format(src.video_url))
+                return None
+            elif "channel's members" in err_msg:
                 print("The video is member-only, skip: {}".format(src.video_url))
                 return None
             elif "live event will begin in" in err_msg:
@@ -157,6 +162,9 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
             except Exception as e:
                 err_msg = str(e).lower()
                 if "members-only content" in err_msg:
+                    print("The video is member-only, skip: {}".format(url))
+                    continue
+                elif "channel's members" in err_msg:
                     print("The video is member-only, skip: {}".format(url))
                     continue
                 

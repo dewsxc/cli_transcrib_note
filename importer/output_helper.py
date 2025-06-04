@@ -11,7 +11,10 @@ class MarkDownHelper:
 
     @classmethod
     def compose_summarize_md(cls, title, summerize):
-        return "\n- " + title + "\n" + "\t- " + summerize
+        if not summerize:
+            return "\n- " + title
+        s = summerize.strip()
+        return "\n- {}\n\t{}{}".format(title, "- " if s[0] != '-' else "", s)
     
     @classmethod
     def compose_file_link(cls, fn):

@@ -18,7 +18,7 @@ class Querioner:
 
     def close_conversation(self):
         """Override to implement for ai model service."""
-        self.conversations = []
+        pass
 
     def ask(self, prompt:str, system_role:str=None)->str:
         """Override to implement for ai model service."""
@@ -70,7 +70,7 @@ class ClaudeSrtSummary(ClaudeQuestioner):
 
     def __init__(self, proj_setup):
         super().__init__(proj_setup)
-        self.init_prompt = "你是世界前500強執行長的的秘書，我將給予讀稿，請從讀稿中，使用繁體中文回覆請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '"
+        self.init_prompt = "你是世界前500強執行長的的秘書，我將給予眾多博主的讀稿文章，請總結讀稿、使用繁體中文回覆請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '，請直接列出核心要點、關鍵訊息、無需開場白、避免廢話、不用客套、不用重複命令、不用結語，"
 
     def summarize_srt(self, q, srt_fp, with_ts=False):
         if not srt_fp:

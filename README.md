@@ -3,7 +3,7 @@
 
 ## Overview
 
-This project meant to scan all channels I monitored on ＹＴ and sent summarize into my Logseq or Obsidian knoledge base, so that I won't need to spend lots of time for listening, just read summarize and search I need in transcription, life saver.
+This project meant to scan all channels I monitored on YT and sent summarize into my Logseq or Obsidian knoledge base, so that I won't need to spend lots of time for listening, just read summarize and search I need in transcription, life saver.
 
 This CLI tool can input audio or video or zoom record as well.
 
@@ -33,7 +33,6 @@ Using web services are very expensive, if you use Apple Silicon Chip series prod
 ### Output Options
 - The output files I put on iCloud, so I can read it on my iPhone, recommand use Obsidian as frontend reader, the sync and read experience better than Loqseg.
 - The path construct is follow Logseq, which is greater than Obsidian on manage knowledge, so I keep naming style for it.
-- Save summaries to specific pages
 
 
 ## Prerequisites
@@ -63,12 +62,13 @@ pip install -r requirements.txt
 - Create a `config.yml` in `./resources/` directory
 - Create a `secret.yml` with necessary API keys
 
+
 ## Configuration
 
 - Remember to config following files:
-  - (`config.yml`): For all kinds of setup
-  - (`secret.yml`): Setup keys for ai model services.
-  - (`channels.yml`): The yt channels you want to monitor.
+  - `config.yml`: For all kinds of setup
+  - `secret.yml`: Setup keys for ai model services.
+  - `channels.yml`: The yt channels you want to monitor.
 
 
 ## Usage
