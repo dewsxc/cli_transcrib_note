@@ -5,7 +5,7 @@ from importer.data_setup import SourceInfo, YTSrcInfo, YTChannalSrcInfo
 from importer.provider import AudioSourceProvider, ZoomVideoProvider, YTVideoProvider, YTChannelsLatestVideoProvider
 from importer.transcriber import AudioTranscriptor, YTTranscriptor
 from importer.recorder import SimpleRecorder
-from importer.questioner import ClaudeSrtSummary
+from importer.questioner import get_srt_summarist
 from importer.output_helper import LogseqHelper
 
 
@@ -23,6 +23,7 @@ class AudioImporter:
         self.proj_setup: ServiceSetup = args.proj_setup
         self.output_helper = LogseqHelper(self.proj_setup)
         self.proj_setup.change_to_graph(self.args.graph)
+        self.srt_summarist = get_srt_summarist(self.args, self.proj_setup)
 
         self.setup()
         
@@ -32,11 +33,10 @@ class AudioImporter:
         """
         self.provider = AudioSourceProvider(self.args)
         self.transcriptor = AudioTranscriptor(self.args)
-        self.questioner = ClaudeSrtSummary(self.proj_setup)
     
     def start_import(self):
 
-        self.questioner.prepare(self.args.ai_model)
+        self.srt_summarist.prepare()
 
         for src in self.provider.get_info():
             
@@ -53,12 +53,12 @@ class AudioImporter:
                     print("Skip transcribing: {}".format(src.src_fp))
                     continue
 
-            self.questioner.summarize_srt(self.get_prompt(src), src.srt_fp)
+            self.srt_summarist.summarize_srt(self.get_prompt(src), src.srt_fp)
 
-            self.save(self.args.page, self.questioner.qa_list, src)
+            self.save(self.args.page, self.srt_summarist.qa_list, src)
             SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
 
-            self.questioner.close_conversation()
+            self.srt_summarist.close_conversation()
     
     def get_prompt(self, src):
         """
@@ -85,7 +85,6 @@ class ZoomRecordImporter(AudioImporter):
     def setup(self):
         self.provider = ZoomVideoProvider(self.args)
         self.transcriptor = AudioTranscriptor(self.args)
-        self.questioner = ClaudeSrtSummary(self.proj_setup)
 
 
 """
@@ -97,7 +96,6 @@ class YTImporter(AudioImporter):
     def setup(self):
         self.provider = YTVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
-        self.questioner = ClaudeSrtSummary(self.proj_setup)
     
     def save(self, page, qa_list, src:YTSrcInfo):
         if page:
@@ -115,7 +113,6 @@ class DailyNewsImporter(YTImporter):
     def setup(self):
         self.provider = YTChannelsLatestVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
-        self.questioner = ClaudeSrtSummary(self.proj_setup)
 
     def get_prompt(self, src:YTChannalSrcInfo):
         return src.question

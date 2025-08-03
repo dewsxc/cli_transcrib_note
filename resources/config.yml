@@ -1,5 +1,5 @@
 work_dir: ~/AINoteWorkspace/cli_transcrib_note
-secret: ~/AINoteWorkspace/cli_doc_chat/resources/secret.yml
+secret: ~/AINoteWorkspace/cli_transcrib_note/resources/secret.yml
 ffmpeg: ffmpeg
 whisper_cpp_dir: ~/AINoteWorkspace/whisper.cpp
 mlx_whisper_models_dir: ~/AINoteWorkspace/mlx-examples/models

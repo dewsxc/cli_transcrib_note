@@ -46,6 +46,10 @@ class ServiceSetup():
     @property
     def gc_server_location(self):
         return self.secret.get('SERVER_LOCATION')
+    
+    @property
+    def gc_gemini_api_key(self):
+        return self.secret.get('GEMINI_API_KEY')
 
     @property
     def anthropic_key(self):

@@ -19,7 +19,17 @@ def parse_args():
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
     # AI
-    p.add_argument('--ai-model', '-a', default="claude-3-haiku-20240307", choices=["claude-3-haiku-20240307", "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022"], help="Only implement Anthropic.")
+    p.add_argument(
+        '-a',
+        '--ai-model',  
+        default="gemini-2.5-flash", 
+        choices=[
+            "gemini-2.5-flash",
+            "claude-3-haiku-20240307", 
+            "claude-3-5-haiku-20241022", 
+            "claude-3-5-sonnet-20241022",
+        ], 
+        help="Anthropic or Google.")
 
 
     # Cmds
