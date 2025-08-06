@@ -22,15 +22,9 @@ def parse_args():
     p.add_argument(
         '-a',
         '--ai-model',  
-        default="gemini-2.5-flash", 
-        choices=[
-            "gemini-2.5-flash",
-            "claude-3-haiku-20240307", 
-            "claude-3-5-haiku-20241022", 
-            "claude-3-5-sonnet-20241022",
-        ], 
-        help="Anthropic or Google.")
-
+        default="gemini-2.5-flash-lite", 
+        help="Only support models of Anthropic or Google.",
+    )
 
     # Cmds
     cmd = p.add_subparsers(dest="cmd")

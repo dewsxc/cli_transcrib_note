@@ -6,21 +6,6 @@ import anthropic
 import google.generativeai as genai
 
 
-"""
-Utils
-"""
-
-def get_srt_summarist(args, proj_setup):
-    models_map = {
-        "gemini-2.5-flash": GeminiQuestioner,
-        "claude-3-haiku-20240307": ClaudeQuestioner, 
-        "claude-3-5-haiku-20241022": ClaudeQuestioner, 
-        "claude-3-5-sonnet-20241022": ClaudeQuestioner,
-    } 
-
-    return models_map[args.ai_model](proj_setup, args.ai_model)
-
-
 class Querioner:
 
     def __init__(self, proj_setup: ServiceSetup, model=None):
@@ -66,6 +51,8 @@ class ClaudeQuestioner(Querioner):
 
     def __init__(self, proj_setup, model="claude-3-5-haiku-20241022"):
         super().__init__(proj_setup, model=model)
+        if not model or model == 'claude':
+            self.model = "claude-3-5-haiku-20241022"
         self.init_prompt = "請總結讀稿、使用繁體中文回覆請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '，請直接列出核心要點、關鍵訊息、無需開場白、避免廢話、不用客套、不用重複命令、不用結語："
 
     def prepare(self):
@@ -109,8 +96,10 @@ class ClaudeQuestioner(Querioner):
 
 class GeminiQuestioner(Querioner):
 
-    def __init__(self, proj_setup, model="gemini-2.5-flash"):
+    def __init__(self, proj_setup, model="gemini-2.5-flash-lite"):
         super().__init__(proj_setup, model=model)
+        if not model or model == 'gemini':
+            self.model = "gemini-2.5-flash-lite"
         self.init_prompt = "請總結讀稿、使用繁體中文回覆請求，並且只使用Markdown unordered list '- '格式來進行排版，即便是標題也需要使用 '- '，請直接列出核心要點、關鍵訊息、無需開場白、避免廢話、不用客套、不用重複命令、不用結語，"
     
     def prepare(self):
@@ -141,3 +130,22 @@ class GeminiQuestioner(Querioner):
             "\n".join([q, content])
         )
         print("Ans:" + ans)
+
+
+"""
+Utils
+"""
+
+MODELS_MAP = {
+    "gemini": GeminiQuestioner,
+    "claude": ClaudeQuestioner,
+}
+
+
+def get_srt_summarist(model_name, proj_setup) -> Querioner:
+    if not model_name:
+        return None
+    sec = model_name.split('-')
+    if len(sec) == 0:
+        return None
+    return MODELS_MAP[sec[0]](proj_setup, model_name)

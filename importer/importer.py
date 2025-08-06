@@ -23,7 +23,7 @@ class AudioImporter:
         self.proj_setup: ServiceSetup = args.proj_setup
         self.output_helper = LogseqHelper(self.proj_setup)
         self.proj_setup.change_to_graph(self.args.graph)
-        self.srt_summarist = get_srt_summarist(self.args, self.proj_setup)
+        self.srt_summarist = get_srt_summarist(self.args.ai_model, self.proj_setup)
 
         self.setup()
         
@@ -35,8 +35,6 @@ class AudioImporter:
         self.transcriptor = AudioTranscriptor(self.args)
     
     def start_import(self):
-
-        self.srt_summarist.prepare()
 
         for src in self.provider.get_info():
             
@@ -52,7 +50,8 @@ class AudioImporter:
                 if not self.transcriptor.start_transcribe(src):
                     print("Skip transcribing: {}".format(src.src_fp))
                     continue
-
+            
+            self.srt_summarist.prepare()
             self.srt_summarist.summarize_srt(self.get_prompt(src), src.srt_fp)
 
             self.save(self.args.page, self.srt_summarist.qa_list, src)
