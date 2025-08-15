@@ -70,6 +70,48 @@ pip install -r requirements.txt
   - `secret.yml`: Setup keys for ai model services.
   - `channels.yml`: The yt channels you want to monitor.
 
+### Configuration Details
+
+Here is a breakdown of the settings available in the configuration files:
+
+#### `resources/config.yml`
+
+This file contains general settings for the tool's operation.
+
+| Key                      | Description                                       | Example                                                 |
+| ------------------------ | ------------------------------------------------- | ------------------------------------------------------- |
+| `work_dir`               | The root directory of the project.                | `~/AINoteWorkspace/cli_transcrib_note`                  |
+| `secret`                 | Path to the `secret.yml` file.                    | `~/AINoteWorkspace/cli_transcrib_note/resources/secret.yml` |
+| `ffmpeg`                 | Path to the `ffmpeg` executable.                  | `ffmpeg`                                                |
+| `whisper_cpp_dir`        | Path to your `whisper.cpp` installation.          | `~/AINoteWorkspace/whisper.cpp`                         |
+| `mlx_whisper_models_dir` | Path to the directory containing MLX Whisper models. | `~/AINoteWorkspace/mlx-examples/models`                 |
+| `graphs`                 | A list of output locations (knowledge graphs).    |                                                         |
+| `graphs.name`            | The name of a specific graph.                     | `NewsFeed`                                              |
+| `graphs.path`            | The file path to the graph's directory.           | `~/Documents/NewsFeed2`                                 |
+
+#### `resources/secret.yml`
+
+This file is for storing your API keys and other secrets. You should create it based on `secret_example.yml`.
+
+| Service   | Key             | Description                   |
+| --------- | --------------- | ----------------------------- |
+| OpenAI    | `OPENAI_KEY`    | Your API key for OpenAI.      |
+| Google    | `DEVELOPER_KEY` | Your API key for Google AI.   |
+| Anthropic | `ANTHROPIC_KEY` | Your API key for Anthropic.   |
+| YouTube   | `YT_API_KEY`    | Your API key for YouTube Data API. |
+|           | ...             | See `secret_example.yml` for the full list of YouTube-related keys. |
+
+#### `resources/channels.yml`
+
+This file defines the YouTube channels you want to monitor.
+
+| Key            | Description                                           | Example                               |
+| -------------- | ----------------------------------------------------- | ------------------------------------- |
+| `username`     | The YouTube username of the channel.                  | `yttalkjun`                           |
+| `channel_name` | The display name of the channel.                      | `投资TALK君`                          |
+| `question`     | The specific prompt to use for summarizing videos.    | `列出所有重要新聞並且摘要文中對新聞的觀點以及敘述` |
+| `is_live`      | (Optional) Set to `true` to fetch live streams.       | `true`                                |
+
 
 ## Usage
 
