@@ -65,7 +65,8 @@ class YTVideoProvider(SourceProvider):
             'playlist_items': '1',
             'extractor_args': {'youtubetab': {'approximate_date': ['']}},
             'writesubtitles': True,
-            'subtitleslangs': ['zh'],
+            'writeautomaticsubs': True,  # Enable auto-generated subtitles
+            'subtitleslangs': ['zh', 'zh-Hans', 'zh-Hant'],  # Multiple languages
             'subtitlesformat': 'srt',
         }
 
@@ -102,25 +103,76 @@ class YTVideoProvider(SourceProvider):
         return True
 
     def download_captions(self, src: YTSrcInfo):
-        if src.video_info.get('requested_subtitles'):
-            for lang in ['zh']:
-                if lang in src.video_info['requested_subtitles']:
-                    subtitle_url = src.video_info['requested_subtitles'][lang]['url']
-                    srt_path = Path(src.default_audio_fp()).with_suffix(f".{lang}.srt").as_posix()
-                    try:
-                        # Use requests to download the subtitle file
-                        response = requests.get(subtitle_url)
-                        response.raise_for_status() # Raise an exception for HTTP errors
-                        with open(srt_path, 'wb') as f:
-                            f.write(response.content)
-                        src.srt_fp = srt_path # Update src.srt_fp to the downloaded srt
-                        print(f"Downloaded {lang} captions to {srt_path}")
+        # Check both manual subtitles and automatic captions
+        manual_subtitles = src.video_info.get('subtitles') or {}
+        automatic_captions = src.video_info.get('automatic_captions') or {}
+        
+        # Priority order for languages (including language variants)
+        preferred_langs = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant', 'en-US', 'en', 'ja', 'ko']
+        
+        print(f"Available manual subtitles: {list(manual_subtitles.keys())}")
+        print(f"Available automatic captions: {list(automatic_captions.keys())}")
+        
+        # First try manual subtitles
+        for lang in preferred_langs:
+            if lang in manual_subtitles:
+                subtitle_formats = manual_subtitles[lang]
+                if isinstance(subtitle_formats, list) and subtitle_formats:
+                    # Find SRT format or use the first available
+                    srt_format = None
+                    for fmt in subtitle_formats:
+                        if fmt.get('ext') == 'srt':
+                            srt_format = fmt
+                            break
+                    
+                    format_to_use = srt_format or subtitle_formats[0]
+                    if self._download_subtitle(src, format_to_use, lang, "manual"):
                         return True
-                    except Exception as e:
-                        print(f"Failed to download {lang} captions: {e}")
-        else:
-            print("No subtitles.")
+        
+        # Then try automatic captions if no manual subtitles found
+        for lang in preferred_langs:
+            if lang in automatic_captions:
+                caption_formats = automatic_captions[lang]
+                if isinstance(caption_formats, list) and caption_formats:
+                    # Find SRT format or use the first available
+                    srt_format = None
+                    for fmt in caption_formats:
+                        if fmt.get('ext') == 'srt':
+                            srt_format = fmt
+                            break
+                    
+                    format_to_use = srt_format or caption_formats[0]
+                    if self._download_subtitle(src, format_to_use, lang, "auto"):
+                        return True
+        
+        print("No subtitles available in preferred languages.")
         return False
+    
+    def _download_subtitle(self, src: YTSrcInfo, subtitle_info, lang, subtitle_type):
+        """Helper method to download a single subtitle"""
+        try:
+            subtitle_url = subtitle_info.get('url')
+            if not subtitle_url:
+                print(f"No URL found for {subtitle_type} {lang} subtitles")
+                return False
+            
+            # Use standard .srt extension (not .lang.srt) to match expected path
+            srt_path = Path(src.default_audio_fp()).with_suffix(".srt").as_posix()
+            
+            print(f"Downloading {subtitle_type} {lang} captions from: {subtitle_url}")
+            response = requests.get(subtitle_url, timeout=30)
+            response.raise_for_status()
+            
+            with open(srt_path, 'wb') as f:
+                f.write(response.content)
+            
+            src.srt_fp = srt_path  # Update src.srt_fp to the downloaded srt
+            print(f"Successfully downloaded {subtitle_type} {lang} captions to {srt_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to download {subtitle_type} {lang} captions: {e}")
+            return False
 
     def download_hd_video(self, src: YTSrcInfo, video_format='.mp4'):
         fp = Path(src.default_audio_fp()).with_suffix(video_format).as_posix()
@@ -213,7 +265,11 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
             ydl_opts = {
                 'playlist_items': '1',
                 'extract_flat': 'in_playlist',
-                'extractor_args': {'youtubetab': {'approximate_date': ['']}}
+                'extractor_args': {'youtubetab': {'approximate_date': ['']}},
+                'writesubtitles': True,
+                'writeautomaticsubs': True,  # Enable auto-generated subtitles
+                'subtitleslangs': ['zh', 'zh-Hans', 'zh-Hant'],  # Multiple languages
+                'subtitlesformat': 'srt',
             }
 
             try:
