@@ -96,5 +96,6 @@ class YTTranscriptor(AudioTranscriptor):
 
     def post_process(self):
         super().post_process()
-        if self.src_info.src_fp and os.path.exists(self.src_info.src_fp):
+        # Only remove the source file if it's not an HD video download
+        if self.src_info.src_fp and os.path.exists(self.src_info.src_fp) and not self.args.hd_video:
             os.remove(self.src_info.src_fp)
