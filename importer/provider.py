@@ -56,7 +56,7 @@ class YTVideoProvider(SourceProvider):
 
     def __init__(self, args):
         super().__init__(args)
-        self.yt_link = args.yt_link
+        self.yt_link = args.yt_link if hasattr(args, 'yt_link') else None
         self.hd_video = args.hd_video if hasattr(args, 'hd_video') else False
 
     def get_info(self)-> Generator[YTSrcInfo]:
@@ -193,6 +193,7 @@ class YTVideoProvider(SourceProvider):
 class YTChannelsLatestVideoProvider(YTVideoProvider):
 
     def __init__(self, args):
+        super().__init__(args)
         self.args = args
         self.monitor_list_path = os.path.abspath(os.path.expanduser(args.monitor_list_path))
 

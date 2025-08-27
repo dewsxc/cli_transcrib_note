@@ -93,9 +93,13 @@ class AudioTranscriptor():
 
 
 class YTTranscriptor(AudioTranscriptor):
+    
+    def __init__(self, args):
+        super().__init__(args)
+        self.dont_delete_src = self.args.hd_video if hasattr(self.args, 'hd_video') else False
 
     def post_process(self):
         super().post_process()
         # Only remove the source file if it's not an HD video download
-        if self.src_info.src_fp and os.path.exists(self.src_info.src_fp) and not self.args.hd_video:
+        if self.src_info.src_fp and os.path.exists(self.src_info.src_fp) and not self.dont_delete_src:
             os.remove(self.src_info.src_fp)
