@@ -47,6 +47,7 @@ class AudioTranscriptor():
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
 
             # TODO Add Whisper.cpp support.
+            print(f"DEBUG: srt_fp before use_mlx: {self.src_info.srt_fp}")
             self.use_mlx(
                 self.args.proj_setup,
                 tmp if tmp else self.src_info.src_fp,

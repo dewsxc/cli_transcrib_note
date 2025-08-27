@@ -46,12 +46,15 @@ class ZoomSrcInfo(SourceInfo):
 class YTSrcInfo(SourceInfo):
 
     def __init__(self, audio_dir, channel_info=None, video_info=None):
-        super().__init__(None)
+        # Do not call super().__init__(None) here, as it sets src_fp and srt_fp to None.
+        # We will set them after author and title are determined.
         self.audio_dir = audio_dir
 
         self.video_url = None
         self.author = None
         self.title = None
+        self.src_fp = None # Initialize to None
+        self.srt_fp = None # Initialize to None
     
         if channel_info:
             self.channel_info = channel_info
@@ -75,10 +78,12 @@ class YTSrcInfo(SourceInfo):
 
         self.title = self.remove_mk_symbol(self.title)
         self.author = self.remove_mk_symbol(self.author)
+        
+        # Set initial src_fp and srt_fp after author and title are available
+        self.set_src_fp_same_as_srt(self.default_audio_fp())
 
-        self.set_src_fp_same_as_srt(
-            os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
-        )
+    def default_audio_fp(self):
+        return os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
 
     def remove_mk_symbol(self, s):
         if not s:

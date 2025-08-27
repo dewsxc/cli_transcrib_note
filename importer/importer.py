@@ -43,13 +43,14 @@ class AudioImporter:
                 continue
             
             if not src.is_srt_exists():
-
                 if not self.provider.get_src(src):
                     continue
-
-                if not self.transcriptor.start_transcribe(src):
-                    print("Skip transcribing: {}".format(src.src_fp))
-                    continue
+                
+                # If captions were downloaded, src.is_srt_exists() will now be true
+                if not src.is_srt_exists():
+                    if not self.transcriptor.start_transcribe(src):
+                        print("Skip transcribing: {}".format(src.src_fp))
+                        continue
             
             self.srt_summarist.prepare()
             self.srt_summarist.summarize_srt(self.get_prompt(src), src.srt_fp)

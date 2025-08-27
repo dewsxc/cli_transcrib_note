@@ -8,6 +8,7 @@ from utils import file_utils
 
 from yt_dlp import YoutubeDL
 import yaml
+import requests
 
 
 class SourceProvider:
@@ -56,12 +57,16 @@ class YTVideoProvider(SourceProvider):
     def __init__(self, args):
         super().__init__(args)
         self.yt_link = args.yt_link
+        self.hd_video = args.hd_video if hasattr(args, 'hd_video') else False
 
     def get_info(self)-> Generator[YTSrcInfo]:
 
         ydl_opts = {
             'playlist_items': '1',
-            'extractor_args': {'youtubetab': {'approximate_date': ['']}}
+            'extractor_args': {'youtubetab': {'approximate_date': ['']}},
+            'writesubtitles': True,
+            'subtitleslangs': ['zh'],
+            'subtitlesformat': 'srt',
         }
 
         try:
@@ -81,15 +86,70 @@ class YTVideoProvider(SourceProvider):
             return
         
     def get_src(self, src: YTSrcInfo):
-        src.src_fp = self.download_lowest_quality_audio(src)
-        if not src.src_fp or not os.path.exists(src.src_fp):
-            print("===== Donwload failed. =====")
+        if self.download_captions(src):
+            return True
+        
+        if self.hd_video:
+            downloaded_fp = self.download_hd_video(src)
+        else:
+            downloaded_fp = self.download_lowest_quality_audio(src)
+        
+        if not downloaded_fp or not os.path.exists(downloaded_fp):
+            print("===== Download failed. =====")
             return False
+        
+        src.set_src_fp_same_as_srt(downloaded_fp) # Ensure srt_fp is updated based on the downloaded file
         return True
+
+    def download_captions(self, src: YTSrcInfo):
+        if src.video_info.get('requested_subtitles'):
+            for lang in ['zh']:
+                if lang in src.video_info['requested_subtitles']:
+                    subtitle_url = src.video_info['requested_subtitles'][lang]['url']
+                    srt_path = Path(src.default_audio_fp()).with_suffix(f".{lang}.srt").as_posix()
+                    try:
+                        # Use requests to download the subtitle file
+                        response = requests.get(subtitle_url)
+                        response.raise_for_status() # Raise an exception for HTTP errors
+                        with open(srt_path, 'wb') as f:
+                            f.write(response.content)
+                        src.srt_fp = srt_path # Update src.srt_fp to the downloaded srt
+                        print(f"Downloaded {lang} captions to {srt_path}")
+                        return True
+                    except Exception as e:
+                        print(f"Failed to download {lang} captions: {e}")
+        else:
+            print("No subtitles.")
+        return False
+
+    def download_hd_video(self, src: YTSrcInfo, video_format='.mp4'):
+        fp = Path(src.default_audio_fp()).with_suffix(video_format).as_posix()
+
+        if os.path.exists(fp):
+            print("Video exists: " + fp)
+            return fp
+        
+        no_ext_fp = Path(fp).with_suffix("").as_posix()
+
+        ydl_opts = {
+            'outtmpl': no_ext_fp,
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+            'merge_output_format': 'mp4',
+        }
+
+        try:
+            print("Start download:", src.video_url, "\nto:", fp)
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([src.video_url])
+        except Exception as e:
+            print(f"Failed to download HD video: {e}")
+            return None
+        
+        return fp
 
     def download_lowest_quality_audio(self, src: YTSrcInfo, audio_format='.wav'):
 
-        fp = src.src_fp
+        fp = src.default_audio_fp()
 
         if os.path.exists(fp):
             print("Audio exists: " + fp)
