@@ -108,7 +108,7 @@ class YTVideoProvider(SourceProvider):
         automatic_captions = src.video_info.get('automatic_captions') or {}
         
         # Priority order for languages (including language variants)
-        preferred_langs = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant', 'en-US', 'en', 'ja', 'ko']
+        preferred_langs = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
         
         print(f"Available manual subtitles: {list(manual_subtitles.keys())}")
         print(f"Available automatic captions: {list(automatic_captions.keys())}")
