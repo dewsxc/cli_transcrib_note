@@ -43,49 +43,28 @@ class ZoomSrcInfo(SourceInfo):
         return Path(self.src_fp).parent.name
 
 
-class YTSrcInfo(SourceInfo):
-
-    def __init__(self, audio_dir, channel_info=None, video_info=None):
-        # Do not call super().__init__(None) here, as it sets src_fp and srt_fp to None.
-        # We will set them after author and title are determined.
+class YTVideoSrcInfo(SourceInfo):
+    def __init__(self, audio_dir, video_data):
+        super().__init__()
         self.audio_dir = audio_dir
+        self.video_data = video_data
 
-        self.video_url = None
-        self.author = None
-        self.title = None
-        self.src_fp = None # Initialize to None
-        self.srt_fp = None # Initialize to None
-    
-        if channel_info:
-            self.channel_info = channel_info
-            self.channel_id = channel_info.get('channel_id')
-            self.author     = channel_info['uploader']
-            self.video_info = channel_info['entries'][0]
-            self.video_url  = self.video_info['url']
-            self.watch_url  = self.video_url
-            self.video_id   = self.video_info['id']
-            self.title      = self.video_info['title']
+        self.video_id = video_data.get('id')
+        self.title = self._remove_mk_symbol(video_data.get('title'))
+        self.author = self._remove_mk_symbol(video_data.get('uploader'))
+        self.channel_id = video_data.get('channel_id')
+        self.video_url = video_data.get('webpage_url')
+        if not self.video_url:  # Channel entries data.
+            self.video_url = video_data.get('url')
+        self.watch_url = self.video_url # Alias for consistency
+        self.subtitles = video_data.get('subtitles')
 
-        if video_info:
-            self.channel_info = None
-            self.channel_id = video_info['channel_id']
-            self.author     = video_info['uploader']
-            self.video_info = video_info
-            self.video_url  = video_info['webpage_url']
-            self.watch_url  = self.video_url
-            self.video_id   = video_info['id']
-            self.title      = video_info['title']
-
-        self.title = self.remove_mk_symbol(self.title)
-        self.author = self.remove_mk_symbol(self.author)
-        
-        # Set initial src_fp and srt_fp after author and title are available
         self.set_src_fp_same_as_srt(self.default_audio_fp())
 
     def default_audio_fp(self):
-        return os.path.join(self.audio_dir, "{} - {}{}".format(self.author, self.title, '.wav'))
+        return os.path.join(self.audio_dir, f"{self.author} - {self.title}.wav")
 
-    def remove_mk_symbol(self, s):
+    def _remove_mk_symbol(self, s):
         if not s:
             return s
         markdown_chars = {
@@ -107,10 +86,30 @@ class YTSrcInfo(SourceInfo):
         return self.video_id
 
 
-class YTChannalSrcInfo(YTSrcInfo):
+class YTChannelSrcInfo:
+    
+    def __init__(self, audio_dir, yt_dlp_info):
+        self.audio_dir = audio_dir
+        self.yt_dlp_info = yt_dlp_info
 
-    def __init__(self, audio_dir, channel_data, channel_info=None, video_info=None):
-        super().__init__(audio_dir, channel_info, video_info)
-        self.acc        = channel_data.get("username")
-        self.channel_name = channel_data.get("channel_name")
-        self.question   = channel_data.get("question")
+        self.channel_id = yt_dlp_info.get('channel_id')
+        self.channel_name = yt_dlp_info.get('channel')
+        self.uploader = yt_dlp_info.get('uploader')
+        self.uploader_id = yt_dlp_info.get('uploader_id')
+        self.description = yt_dlp_info.get('description')
+        self.tags = yt_dlp_info.get('tags')
+        self.thumbnails = yt_dlp_info.get('thumbnails')
+        self.webpage_url = yt_dlp_info.get('webpage_url')
+
+        self.entries = []
+        
+        for entry in yt_dlp_info.get('entries', []):
+            v = YTVideoSrcInfo(audio_dir, entry)
+            v.channel_id = self.channel_id if not v.channel_id else v.channel_id
+            v.author = self.uploader if not v.author else v.author
+            self.entries.append(v)
+
+    def get_latest_video(self):
+        if self.entries:
+            return self.entries[0]
+        return None

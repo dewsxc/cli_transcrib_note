@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from collections.abc import Generator
 
-from importer.data_setup import SourceInfo, ZoomSrcInfo, YTSrcInfo, YTChannalSrcInfo
+from importer.data_setup import SourceInfo, ZoomSrcInfo, YTVideoSrcInfo, YTChannelSrcInfo
 from utils import file_utils
 
 from yt_dlp import YoutubeDL
@@ -58,35 +58,36 @@ class YTVideoProvider(SourceProvider):
         super().__init__(args)
         self.yt_link = args.yt_link if hasattr(args, 'yt_link') else None
         self.hd_video = args.hd_video if hasattr(args, 'hd_video') else False
-
-    def get_info(self)-> Generator[YTSrcInfo]:
-
+    
+    def get_info_from_url(self, url)-> YTVideoSrcInfo:
         ydl_opts = {
             'playlist_items': '1',
             'extractor_args': {'youtubetab': {'approximate_date': ['']}},
             'writesubtitles': True,
-            'writeautomaticsubs': True,  # Enable auto-generated subtitles
-            'subtitleslangs': ['zh', 'zh-Hans', 'zh-Hant'],  # Multiple languages
+            'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
             'subtitlesformat': 'srt',
         }
 
         try:
             with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(self.args.yt_link, download=False)
+                info = ydl.extract_info(url, download=False)
 
-            yield YTSrcInfo(self.args.proj_setup.audio_dir, video_info=info)
+            return YTVideoSrcInfo(self.args.proj_setup.audio_dir, info)
         
         except Exception as e:
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
-                print("The video is member-only, skip: {}".format(self.yt_link))            
+                print(f"The video is member-only, skip: {url}")            
             elif "channel's members" in err_msg:
-                print("The video is member-only, skip: {}".format(self.yt_link))
+                print(f"The video is member-only, skip: {url}")
             elif "live event will begin in" in err_msg:
-                print("The live record is not ready: {}".format(self.yt_link))
+                print(f"The live record is not ready: {url}")
             return
-        
-    def get_src(self, src: YTSrcInfo):
+
+    def get_info(self)-> Generator[YTVideoSrcInfo]:
+        yield self.get_info_from_url(self.args.yt_link)
+    
+    def get_src(self, src: YTVideoSrcInfo):
         if self.download_captions(src):
             return True
         
@@ -99,82 +100,58 @@ class YTVideoProvider(SourceProvider):
             print("===== Download failed. =====")
             return False
         
-        src.set_src_fp_same_as_srt(downloaded_fp) # Ensure srt_fp is updated based on the downloaded file
+        src.set_src_fp_same_as_srt(downloaded_fp)
         return True
 
-    def download_captions(self, src: YTSrcInfo):
-        # Check both manual subtitles and automatic captions
-        manual_subtitles = src.video_info.get('subtitles') or {}
-        automatic_captions = src.video_info.get('automatic_captions') or {}
+    def download_captions(self, src: YTVideoSrcInfo):
+        preferred_format = 'srt'
         
         # Priority order for languages (including language variants)
         preferred_langs = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
         
-        print(f"Available manual subtitles: {list(manual_subtitles.keys())}")
-        print(f"Available automatic captions: {list(automatic_captions.keys())}")
-        
-        # First try manual subtitles
-        for lang in preferred_langs:
-            if lang in manual_subtitles:
-                subtitle_formats = manual_subtitles[lang]
-                if isinstance(subtitle_formats, list) and subtitle_formats:
-                    # Find SRT format or use the first available
-                    srt_format = None
-                    for fmt in subtitle_formats:
-                        if fmt.get('ext') == 'srt':
-                            srt_format = fmt
+        selected_sub_info = None
+        selected_lang = None
+
+        if src.subtitles:
+            print(f"Available subtitles: {list(src.subtitles.keys())}")
+            for lang in preferred_langs:
+                if lang in src.subtitles:
+                    for sub in src.subtitles[lang]:
+                        if sub.get('ext') == preferred_format:
+                            selected_sub_info = sub
+                            selected_lang = lang
                             break
-                    
-                    format_to_use = srt_format or subtitle_formats[0]
-                    if self._download_subtitle(src, format_to_use, lang, "manual"):
-                        return True
+                if selected_sub_info:
+                    break
         
-        # Then try automatic captions if no manual subtitles found
-        for lang in preferred_langs:
-            if lang in automatic_captions:
-                caption_formats = automatic_captions[lang]
-                if isinstance(caption_formats, list) and caption_formats:
-                    # Find SRT format or use the first available
-                    srt_format = None
-                    for fmt in caption_formats:
-                        if fmt.get('ext') == 'srt':
-                            srt_format = fmt
-                            break
-                    
-                    format_to_use = srt_format or caption_formats[0]
-                    if self._download_subtitle(src, format_to_use, lang, "auto"):
-                        return True
-        
-        print("No subtitles available in preferred languages.")
-        return False
-    
-    def _download_subtitle(self, src: YTSrcInfo, subtitle_info, lang, subtitle_type):
-        """Helper method to download a single subtitle"""
+        if not selected_sub_info:
+            print(f"No {preferred_format} subtitles found for preferred languages: {', '.join(preferred_langs)}")
+            return False
+            
         try:
-            subtitle_url = subtitle_info.get('url')
+            subtitle_url = selected_sub_info.get('url')
             if not subtitle_url:
-                print(f"No URL found for {subtitle_type} {lang} subtitles")
+                print(f"No URL found for {preferred_format} subtitles for language {selected_lang}")
                 return False
             
-            # Use standard .srt extension (not .lang.srt) to match expected path
             srt_path = Path(src.default_audio_fp()).with_suffix(".srt").as_posix()
             
-            print(f"Downloading {subtitle_type} {lang} captions from: {subtitle_url}")
+            print(f"Downloading {selected_lang} captions from: {subtitle_url}")
             response = requests.get(subtitle_url, timeout=30)
             response.raise_for_status()
             
             with open(srt_path, 'wb') as f:
                 f.write(response.content)
             
-            src.srt_fp = srt_path  # Update src.srt_fp to the downloaded srt
-            print(f"Successfully downloaded {subtitle_type} {lang} captions to {srt_path}")
+            src.srt_fp = srt_path
+            print(f"Successfully downloaded {selected_lang} {preferred_format} captions to {srt_path}")
             return True
-            
+
         except Exception as e:
-            print(f"Failed to download {subtitle_type} {lang} captions: {e}")
+            print(f"Failed to download {selected_lang} {preferred_format} captions: {e}")
             return False
 
-    def download_hd_video(self, src: YTSrcInfo, video_format='.mp4'):
+    def download_hd_video(self, src: YTVideoSrcInfo, video_format='.mp4'):
         fp = Path(src.default_audio_fp()).with_suffix(video_format).as_posix()
 
         if os.path.exists(fp):
@@ -199,7 +176,7 @@ class YTVideoProvider(SourceProvider):
         
         return fp
 
-    def download_lowest_quality_audio(self, src: YTSrcInfo, audio_format='.wav'):
+    def download_lowest_quality_audio(self, src: YTVideoSrcInfo, audio_format='.wav'):
 
         fp = src.default_audio_fp()
 
@@ -207,9 +184,6 @@ class YTVideoProvider(SourceProvider):
             print("Audio exists: " + fp)
             return fp
         
-        # The ydl will transform audio format as you assign, if your fp has ext in path, ydl will append ext directly.
-        # Like input: aaa.wav
-        # In result: aaa.wav.wav
         no_ext_fp = Path(fp).with_suffix("").as_posix()
 
         ydl_opts = {
@@ -217,7 +191,7 @@ class YTVideoProvider(SourceProvider):
             'format': 'worstaudio/worst',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': audio_format.replace(".", ""), # Remove '.' for user to keep consistency of meaning.
+                'preferredcodec': audio_format.replace(".", ""),
             }],
         }
 
@@ -228,13 +202,13 @@ class YTVideoProvider(SourceProvider):
         except Exception as e:
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
-                print("The video is member-only, skip: {}".format(src.video_url))
+                print(f"The video is member-only, skip: {src.video_url}")
                 return None
             elif "channel's members" in err_msg:
-                print("The video is member-only, skip: {}".format(src.video_url))
+                print(f"The video is member-only, skip: {src.video_url}")
                 return None
             elif "live event will begin in" in err_msg:
-                print("The live record is not ready: {}".format(src.video_url))
+                print(f"The live record is not ready: {src.video_url}")
                 return None
             else:
                 raise e
@@ -249,26 +223,25 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         self.args = args
         self.monitor_list_path = os.path.abspath(os.path.expanduser(args.monitor_list_path))
 
-    def get_info(self)-> Generator[YTChannalSrcInfo]:
+    def get_info(self)-> Generator[YTChannelSrcInfo]:
 
         with open(self.monitor_list_path, 'r') as f:
             monitor_list = yaml.load(f, Loader=yaml.BaseLoader)
 
-        for data in monitor_list:
+        for channel_config in monitor_list:
 
-            print("Checking: " + data.get('channel_name'))
+            print("Checking: " + channel_config.get('channel_name'))
 
-            is_live = data.get("is_live", False)
+            is_live = channel_config.get("is_live", False)
 
-            url = 'https://www.youtube.com/@{}/{}'.format(data.get("username"), "streams" if is_live else "videos")
+            url = 'https://www.youtube.com/@{}/{}'.format(channel_config.get("username"), "streams" if is_live else "videos")
 
             ydl_opts = {
                 'playlist_items': '1',
                 'extract_flat': 'in_playlist',
                 'extractor_args': {'youtubetab': {'approximate_date': ['']}},
                 'writesubtitles': True,
-                'writeautomaticsubs': True,  # Enable auto-generated subtitles
-                'subtitleslangs': ['zh', 'zh-Hans', 'zh-Hant'],  # Multiple languages
+                'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
                 'subtitlesformat': 'srt',
             }
 
@@ -279,26 +252,33 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
             except Exception as e:
                 err_msg = str(e).lower()
                 if "members-only content" in err_msg:
-                    print("The video is member-only, skip: {}".format(url))
+                    print(f"The video is member-only, skip: {url}")
                     continue
                 elif "channel's members" in err_msg:
-                    print("The video is member-only, skip: {}".format(url))
+                    print(f"The video is member-only, skip: {url}")
                     continue
                 
-            first_v_info = info['entries'][0]
-            ts = first_v_info.get('timestamp')
+            channel_src_info = YTChannelSrcInfo(self.args.proj_setup.audio_dir, info)
+            latest_video = channel_src_info.get_latest_video()
+
+            if not latest_video:
+                print(f"No latest video found for channel: {channel_config.get('channel_name')}")
+                continue
+
+            ts = latest_video.video_data.get('timestamp')
             if not ts:
-                print("Video is not ready, skip: {} {}".format(first_v_info.get("title"), first_v_info.get("url")))
+                print(f"Video is not ready, skip: {latest_video.title} {latest_video.video_url}")
                 continue
 
             pt = datetime.fromtimestamp(ts)
             
             if (datetime.today() - pt) / timedelta(hours=1) > 24:
-                print("Video publish at {} is not fresh.".format(pt))
+                print(f"Video publish at {pt} is not fresh.")
                 continue
-
-            yield YTChannalSrcInfo(
-                self.args.proj_setup.audio_dir,
-                data, 
-                channel_info=info,
-            )
+            
+            # If want subtitles, need to request video info again, the data in channal info is not included.
+            if not latest_video.subtitles:
+                print("Try to get video info for subtitles...")
+                yield self.get_info_from_url(latest_video.video_url)
+            else:
+                yield latest_video

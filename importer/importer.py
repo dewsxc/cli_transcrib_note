@@ -1,7 +1,7 @@
 from argparse import Namespace
 
 from setup import ServiceSetup
-from importer.data_setup import SourceInfo, YTSrcInfo, YTChannalSrcInfo
+from importer.data_setup import SourceInfo, YTVideoSrcInfo, YTChannelSrcInfo
 from importer.provider import AudioSourceProvider, ZoomVideoProvider, YTVideoProvider, YTChannelsLatestVideoProvider
 from importer.transcriber import AudioTranscriptor, YTTranscriptor
 from importer.recorder import SimpleRecorder
@@ -97,7 +97,7 @@ class YTImporter(AudioImporter):
         self.provider = YTVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
     
-    def save(self, page, qa_list, src:YTSrcInfo):
+    def save(self, page, qa_list, src:YTVideoSrcInfo):
         if page:
             self.output_helper.save_summary_under_page_with_url(page, qa_list,src.video_url, src.srt_fp)
         else:
@@ -113,6 +113,3 @@ class DailyNewsImporter(YTImporter):
     def setup(self):
         self.provider = YTChannelsLatestVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
-
-    def get_prompt(self, src:YTChannalSrcInfo):
-        return src.question

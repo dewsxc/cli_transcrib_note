@@ -4,3 +4,4 @@ resources/secret.yml
 resources/channels.yml
 .DS_Store
 tmp/
+.vscode/
