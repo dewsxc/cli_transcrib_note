@@ -82,7 +82,7 @@ class YTVideoProvider(SourceProvider):
                 print(f"The video is member-only, skip: {url}")
             elif "live event will begin in" in err_msg:
                 print(f"The live record is not ready: {url}")
-            return
+            raise e
 
     def get_info(self)-> Generator[YTVideoSrcInfo]:
         yield self.get_info_from_url(self.args.yt_link)
@@ -277,8 +277,14 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
                 continue
             
             # If want subtitles, need to request video info again, the data in channal info is not included.
-            if not latest_video.subtitles:
-                print("Try to get video info for subtitles...")
-                yield self.get_info_from_url(latest_video.video_url)
-            else:
-                yield latest_video
+            yield latest_video
+
+    def get_src(self, src):
+        v = src
+        # Video info from channel list, did not include subtitles and info is minimal, need request again.
+        if not src.subtitles:
+            v = self.get_info_from_url(src.video_url)
+        # Member only video or other can not access.
+        if not v:
+            return None
+        return super().get_src(v)

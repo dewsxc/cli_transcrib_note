@@ -54,8 +54,6 @@ class YTVideoSrcInfo(SourceInfo):
         self.author = self._remove_mk_symbol(video_data.get('uploader'))
         self.channel_id = video_data.get('channel_id')
         self.video_url = video_data.get('webpage_url')
-        if not self.video_url:  # Channel entries data.
-            self.video_url = video_data.get('url')
         self.watch_url = self.video_url # Alias for consistency
         self.subtitles = video_data.get('subtitles')
 
@@ -104,9 +102,10 @@ class YTChannelSrcInfo:
         self.entries = []
         
         for entry in yt_dlp_info.get('entries', []):
+            entry['channel_id'] = entry.get('channel_id') or self.channel_id
+            entry['uploader'] = entry.get('uploader') or self.uploader
+            entry['webpage_url'] = entry.get('webpage_url') or entry.get('url')
             v = YTVideoSrcInfo(audio_dir, entry)
-            v.channel_id = self.channel_id if not v.channel_id else v.channel_id
-            v.author = self.uploader if not v.author else v.author
             self.entries.append(v)
 
     def get_latest_video(self):
