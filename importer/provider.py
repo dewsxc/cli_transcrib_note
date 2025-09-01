@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from collections.abc import Generator
 
 from importer.data_setup import SourceInfo, ZoomSrcInfo, YTVideoSrcInfo, YTChannelSrcInfo
-from utils import file_utils
+from utils import file_utils, content_utils
 
 from yt_dlp import YoutubeDL
 import yaml
@@ -139,10 +139,10 @@ class YTVideoProvider(SourceProvider):
             print(f"Downloading {selected_lang} captions from: {subtitle_url}")
             response = requests.get(subtitle_url, timeout=30)
             response.raise_for_status()
-            
+
             with open(srt_path, 'wb') as f:
                 f.write(response.content)
-            
+            content_utils.s_to_t(srt_path)
             src.srt_fp = srt_path
             print(f"Successfully downloaded {selected_lang} {preferred_format} captions to {srt_path}")
             return True
@@ -222,6 +222,7 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         super().__init__(args)
         self.args = args
         self.monitor_list_path = os.path.abspath(os.path.expanduser(args.monitor_list_path))
+        self.current_channel_config = None
 
     def get_info(self)-> Generator[YTChannelSrcInfo]:
 
@@ -231,7 +232,8 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         for channel_config in monitor_list:
 
             print("Checking: " + channel_config.get('channel_name'))
-
+            self.current_channel_config = channel_config
+            
             is_live = channel_config.get("is_live", False)
 
             url = 'https://www.youtube.com/@{}/{}'.format(channel_config.get("username"), "streams" if is_live else "videos")
@@ -279,6 +281,8 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
             # If want subtitles, need to request video info again, the data in channal info is not included.
             yield latest_video
 
+        self.current_channel_config = None
+
     def get_src(self, src):
         v = src
         # Video info from channel list, did not include subtitles and info is minimal, need request again.
@@ -288,3 +292,6 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         if not v:
             return None
         return super().get_src(v)
+
+    def get_prompt(self, src):
+        return self.current_channel_config.get('question')

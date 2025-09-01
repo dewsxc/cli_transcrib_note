@@ -113,3 +113,6 @@ class DailyNewsImporter(YTImporter):
     def setup(self):
         self.provider = YTChannelsLatestVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
+    
+    def get_prompt(self, src):
+        return self.provider.get_prompt(src)
