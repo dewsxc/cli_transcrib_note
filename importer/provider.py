@@ -77,11 +77,14 @@ class YTVideoProvider(SourceProvider):
         except Exception as e:
             err_msg = str(e).lower()
             if "members-only content" in err_msg:
-                print(f"The video is member-only, skip: {url}")            
+                print(f"The video is member-only, skip: {url}")
+                return None
             elif "channel's members" in err_msg:
                 print(f"The video is member-only, skip: {url}")
+                return None
             elif "live event will begin in" in err_msg:
                 print(f"The live record is not ready: {url}")
+                return None
             raise e
 
     def get_info(self)-> Generator[YTVideoSrcInfo]:
