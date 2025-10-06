@@ -38,6 +38,8 @@ class AudioImporter:
 
         for src in self.provider.get_info():
             
+            if src.src_fp:
+                print("Get: ", src.src_fp)
             if SimpleRecorder.check_if_had_read(self.args.proj_setup, src.get_main_id(), src.get_id()):
                 print("Already read: {} {}".format(src.get_main_id(), src.get_id()))
                 continue

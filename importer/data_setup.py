@@ -1,6 +1,7 @@
 import os
 import re
 from pathlib import Path
+import hashlib
 
 
 """
@@ -26,7 +27,7 @@ class SourceInfo:
         return Path(self.srt_fp).parent.name if self.srt_fp else ""
 
     def get_id(self):
-        return Path(self.srt_fp).with_suffix("").name if self.srt_fp else ""
+        return hashlib.md5(Path(self.srt_fp).with_suffix("").name.encode('utf-8')).hexdigest() if self.srt_fp else ""
     
     def is_srt_exists(self):
         return self.srt_fp and os.path.exists(self.srt_fp)
