@@ -23,10 +23,10 @@ class SourceInfo:
         return Path(self.srt_fp).with_suffix("").name if self.srt_fp else ""
 
     def get_main_id(self):
-        return Path(self.src_fp).name
+        return Path(self.srt_fp).parent.name if self.srt_fp else ""
 
     def get_id(self):
-        return "1"
+        return Path(self.srt_fp).with_suffix("").name if self.srt_fp else ""
     
     def is_srt_exists(self):
         return self.srt_fp and os.path.exists(self.srt_fp)

@@ -37,6 +37,7 @@ def parse_args():
     yt_args = cmd.add_parser('yt', help="Transcribe from YT video link.")
     yt_args.add_argument('yt_link', help="YT link.")
     yt_args.add_argument('--hd-video', action='store_true', help="Download video in HD quality instead of lowest quality audio.")
+    
     # Audio or Video
     audio_args = cmd.add_parser('audio', help="Transcrobe from Audio or Video path, support directory.")
     audio_args.add_argument('src_fp', help="Source file path.")

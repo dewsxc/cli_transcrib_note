@@ -137,17 +137,14 @@ class YTVideoProvider(SourceProvider):
                 print(f"No URL found for {preferred_format} subtitles for language {selected_lang}")
                 return False
             
-            srt_path = Path(src.default_audio_fp()).with_suffix(".srt").as_posix()
-            
             print(f"Downloading {selected_lang} captions from: {subtitle_url}")
             response = requests.get(subtitle_url, timeout=30)
             response.raise_for_status()
 
-            with open(srt_path, 'wb') as f:
+            with open(src.srt_fp, 'wb') as f:
                 f.write(response.content)
-            content_utils.s_to_t(srt_path)
-            src.srt_fp = srt_path
-            print(f"Successfully downloaded {selected_lang} {preferred_format} captions to {srt_path}")
+            content_utils.s_to_t(src.srt_fp)
+            print(f"Successfully downloaded {selected_lang} {preferred_format} captions to {src.srt_fp}")
             return True
 
         except Exception as e:
