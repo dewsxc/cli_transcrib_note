@@ -45,7 +45,8 @@ class AudioImporter:
                 continue
             
             if not src.is_srt_exists():
-                if not self.provider.get_src(src):
+                src = self.provider.get_src(src)
+                if not src:
                     continue
                 
                 # If captions were downloaded, src.is_srt_exists() will now be true

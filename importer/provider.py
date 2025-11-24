@@ -92,7 +92,7 @@ class YTVideoProvider(SourceProvider):
     
     def get_src(self, src: YTVideoSrcInfo):
         if self.download_captions(src):
-            return True
+            return src
         
         if self.hd_video:
             downloaded_fp = self.download_hd_video(src)
@@ -101,10 +101,10 @@ class YTVideoProvider(SourceProvider):
         
         if not downloaded_fp or not os.path.exists(downloaded_fp):
             print("===== Download failed. =====")
-            return False
+            return None
         
         src.set_src_fp_same_as_srt(downloaded_fp)
-        return True
+        return src
 
     def download_captions(self, src: YTVideoSrcInfo):
         preferred_format = 'srt'
