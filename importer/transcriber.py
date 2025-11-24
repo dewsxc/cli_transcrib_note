@@ -18,7 +18,7 @@ class AudioTranscriptor():
         self.src_info = src
         result = True
         if self.pre_process():  # True if need transcription.
-            result = self.__transcribe()
+            result = self.__transcribe(src.lang)
         else:
             result = False
         self.post_process()
@@ -35,7 +35,7 @@ class AudioTranscriptor():
 
         return True
 
-    def __transcribe(self):
+    def __transcribe(self, lang=None):
         """ Will bypass if file exists. """
         
         if not self.src_info.src_fp or not os.path.exists(self.src_info.src_fp):
@@ -47,13 +47,13 @@ class AudioTranscriptor():
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
 
             # TODO Add Whisper.cpp support.
-            print(f"Transcribing: {tmp if tmp else self.src_info.src_fp}")
+            print(f"Transcribing with {lang}: {tmp if tmp else self.src_info.src_fp}")
             self.use_mlx(
                 self.args.proj_setup,
                 tmp if tmp else self.src_info.src_fp,
                 self.src_info.srt_fp,
                 model_size=self.args.model_size,
-                lang=self.args.lang,
+                lang=lang if lang else self.args.lang,
             )
 
             if tmp and os.path.exists(tmp):

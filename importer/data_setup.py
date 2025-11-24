@@ -12,6 +12,7 @@ class SourceInfo:
 
     def __init__(self, src_fp=None):
         self.set_src_fp_same_as_srt(src_fp)
+        self.lang = 'zh'
     
     def set_src_fp_same_as_srt(self, fp):
         self.src_fp = fp
@@ -90,6 +91,7 @@ class YTChannelSrcInfo:
     def __init__(self, audio_dir, yt_dlp_info):
         self.audio_dir = audio_dir
         self.yt_dlp_info = yt_dlp_info
+        self.lang = 'zh'
 
         self.channel_id = yt_dlp_info.get('channel_id')
         self.channel_name = yt_dlp_info.get('channel')
@@ -107,6 +109,7 @@ class YTChannelSrcInfo:
             entry['uploader'] = entry.get('uploader') or self.uploader
             entry['webpage_url'] = entry.get('webpage_url') or entry.get('url')
             v = YTVideoSrcInfo(audio_dir, entry)
+            v.lang = self.lang
             self.entries.append(v)
 
     def get_latest_video(self):
