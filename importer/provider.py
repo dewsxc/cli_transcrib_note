@@ -289,10 +289,12 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         # Video info from channel list, did not include subtitles and info is minimal, need request again.
         if not src.subtitles:
             v = self.get_info_from_url(src.video_url)
-            v.lang = src.lang
         # Member only video or other can not access.
         if not v:
             return None
+        else:
+            # Swap info.
+            v.lang = src.lang
         return super().get_src(v)
 
     def get_prompt(self, src):
