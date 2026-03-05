@@ -26,6 +26,12 @@ Using web services are very expensive, if you use Apple Silicon Chip series prod
 - whisper.cpp: This model is great, but will comsume all resoureces.
   - [Pull from github](https://github.com/ggerganov/whisper.cpp)
 
+- Benchmark
+  - `mlx-whisper` with `small`: 19x
+  - `mlx-whisper` with `whisper-large-v3-turbo-q4` 9x
+  - `lightening-mlx-whisper` with `distil-large-v3` 4.36x
+- The `lightening-mlx-whisper` design to batch the process for wide memory bandwidth, M2 chip has not enough memory bendwith to make difference, use `mlx-whisper` with `whisper-large-v3-turbo-q4` will be better.
+
 ### AI Summarization
 - The Anthropic Claude series are cheap and quality are great compare with others. 
 
