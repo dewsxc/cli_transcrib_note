@@ -5,6 +5,7 @@ pyyaml
 
 # AI
 google-generativeai 
+lightning-whisper-mlx
 # google-cloud-aiplatform
 
 anthropic

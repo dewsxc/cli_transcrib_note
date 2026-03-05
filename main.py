@@ -14,15 +14,15 @@ def parse_args():
     p.add_argument('--graph', '-g', default='NewsFeed', choices=["NewsFeed", "Trading", "Note", "Test"], help="Save to graph.")
 
     # Whisper
-    p.add_argument('--speech-to-text', '-t', default='mlx-whisper', choices=["mlx-whisper", "whisper.cpp"], help="Choose whisper models for trascribing.")
-    p.add_argument('--model-size', '-s', default="whisper-large-v3-turbo-q4", choices=["small", "medium", "large", "whisper-large-v3-turbo-q4"], help="Choose model size.")
+    p.add_argument('--speech-to-text', '-t', default="mlx-whisper", choices=["lightning-whisper-mlx", "mlx-whisper", "whisper.cpp"], help="Choose whisper models for trascribing.")
+    p.add_argument('--model-size', '-s', default="large", choices=["small", "medium", "large"], help="Choose model size.")
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
     # AI
     p.add_argument(
         '-a',
         '--ai-model',  
-        default="gemini-3-flash-preview", 
+        default="gemini-2.5-flash-lite", 
         help="Only support models of Anthropic or Google.",
     )
 

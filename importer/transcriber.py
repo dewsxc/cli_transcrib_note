@@ -48,21 +48,31 @@ class AudioTranscriptor():
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
 
             # TODO Add Whisper.cpp support.
-            print(f"Transcribing with {lang}: {tmp if tmp else self.src_info.src_fp}")
-            self.use_mlx(
-                self.args.proj_setup,
-                tmp if tmp else self.src_info.src_fp,
-                self.src_info.srt_fp,
-                model_size=self.args.model_size,
-                lang=lang if lang else self.args.lang,
-            )
+            print(f"Transcribing with {lang} using {self.args.speech_to_text}: {tmp if tmp else self.src_info.src_fp}")
+
+            if self.args.speech_to_text == 'lightning-whisper-mlx':
+                self.use_lightning_mlx(
+                    self.args.proj_setup,
+                    tmp if tmp else self.src_info.src_fp,
+                    self.src_info.srt_fp,
+                    model_size=self.args.model_size,
+                    lang=lang if lang else self.args.lang,
+                )
+            else:
+                self.use_mlx(
+                    self.args.proj_setup,
+                    tmp if tmp else self.src_info.src_fp,
+                    self.src_info.srt_fp,
+                    model_size=self.args.model_size,
+                    lang=lang if lang else self.args.lang,
+                )
 
             if tmp and os.path.exists(tmp):
                 os.remove(tmp)
 
         except Exception as e:
             print(e)
-            if os.path.exists(tmp):
+            if tmp and os.path.exists(tmp):
                 os.remove(tmp)
 
             raise e
@@ -75,6 +85,10 @@ class AudioTranscriptor():
     
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.
+        
+        # Map model size for mlx-whisper (local model)
+        if model_size == "large":
+            model_size = "whisper-large-v3-turbo-q4"
 
         model_dir = proj_setup.get_dir_for_mlx_whisper_model(model_size)
         if not os.path.exists(model_dir):
@@ -102,6 +116,74 @@ class AudioTranscriptor():
         writer = writers.get_writer(format, os.path.dirname(srt_fp))
         writer(result, srt_fp)
         
+        return False
+
+    def use_lightning_mlx(self, proj_setup: ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
+        # Use lightning-whisper-mlx framework.
+        from lightning_whisper_mlx import LightningWhisperMLX
+
+        # Map model size for lightning-whisper-mlx
+        if model_size == "large":
+            model_size = "distil-large-v3"
+
+        # Transcribe
+        start_time = time.time()
+        
+        # lightning-whisper-mlx supports passing the model name directly (it will download or find in cache)
+        # or it can take a path.
+        # Quantization is 4bits by default in the library if not specified.
+        whisper = LightningWhisperMLX(model=model_size, batch_size=12)
+        # verbose is not supported in LightningWhisperMLX.transcribe(), we have to print progress ourselves or omit it.
+        result = whisper.transcribe(audio_path=src, language=lang)
+        
+        end_time = time.time()
+
+        # Benchmark
+        transcribe_duration = end_time - start_time
+        
+        # Wait, if verbose=True, lightning-whisper-mlx might return a generator or different dict format
+        # Let's handle it properly by converting to list if needed
+        if hasattr(result, '__iter__') and not isinstance(result, dict):
+            result = list(result)
+            
+        # lightning-whisper-mlx return result is a dict with 'segments' as a list of lists: [start_seek, end_seek, text]
+        if isinstance(result, dict) and 'segments' in result:
+            segments = result['segments']
+            formatted_segments = []
+            audio_duration = 0
+            
+            for seg in segments:
+                if isinstance(seg, list) and len(seg) >= 3:
+                    start_seek, end_seek, text = seg[0], seg[1], seg[2]
+                    # convert frame seek to seconds: frame * hop_length / sample_rate
+                    # hop_length is 160, sample_rate is 16000
+                    start_sec = start_seek * 160 / 16000
+                    end_sec = end_seek * 160 / 16000
+                    
+                    formatted_segments.append({
+                        'start': start_sec,
+                        'end': end_sec,
+                        'text': text
+                    })
+                    audio_duration = max(audio_duration, end_sec)
+                elif isinstance(seg, dict):
+                    # In case it gets updated to return dicts in the future
+                    formatted_segments.append(seg)
+                    audio_duration = max(audio_duration, seg.get('end', 0))
+
+            result['segments'] = formatted_segments
+        else:
+            audio_duration = 0
+
+        ratio = audio_duration / transcribe_duration if transcribe_duration > 0 else 0
+
+        print(f"Transcription finished in {transcribe_duration:.2f} seconds.")
+        print(f"Audio duration: {audio_duration:.2f} seconds.")
+        print(f"Speedup ratio: {ratio:.2f}x")
+
+        writer = writers.get_writer(format, os.path.dirname(srt_fp))
+        writer(result, srt_fp)
+
         return False
 
 
