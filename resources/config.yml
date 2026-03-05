@@ -12,7 +12,7 @@ graphs:
     path: ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Note2
 
   - name: Trading
-    path: ~/Library/Mobile Documents/iCloud~com~logseq~logseq/Documents/Trading
+    path: /Users/ychou/Google Drive/我的雲端硬碟/Trading
 
   - name: Test
     path: ~/AINoteWorkspace/cli_transcrib_note/news/Test

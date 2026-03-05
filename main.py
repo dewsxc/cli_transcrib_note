@@ -15,14 +15,14 @@ def parse_args():
 
     # Whisper
     p.add_argument('--speech-to-text', '-t', default='mlx-whisper', choices=["mlx-whisper", "whisper.cpp"], help="Choose whisper models for trascribing.")
-    p.add_argument('--model-size', '-s', default="small", choices=["small", "medium", "large"], help="Choose model size.")
+    p.add_argument('--model-size', '-s', default="whisper-large-v3-turbo-q4", choices=["small", "medium", "large", "whisper-large-v3-turbo-q4"], help="Choose model size.")
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
     # AI
     p.add_argument(
         '-a',
         '--ai-model',  
-        default="gemini-2.5-flash-lite", 
+        default="gemini-3-flash-preview", 
         help="Only support models of Anthropic or Google.",
     )
 

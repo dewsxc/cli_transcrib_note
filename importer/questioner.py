@@ -4,6 +4,7 @@ from setup import ServiceSetup
 
 import anthropic
 import google.generativeai as genai
+from google.generativeai.types import BlockedPromptException
 
 
 class Querioner:
@@ -109,7 +110,12 @@ class GeminiQuestioner(Querioner):
         self.chat = genai.GenerativeModel(self.model, system_instruction=self.init_prompt).start_chat()
 
     def ask(self, prompt):
-        responses = self.chat.send_message(prompt)
+        try:
+            responses = self.chat.send_message(prompt)
+        except BlockedPromptException as e:
+            print(e)
+            return 'PROHIBITED_CONTENT'
+
         ans = responses.text
         self.stash_qa(prompt, ans)
         return ans

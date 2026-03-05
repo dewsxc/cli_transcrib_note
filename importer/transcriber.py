@@ -1,4 +1,5 @@
 import os
+import time
 
 from utils import content_utils
 from utils import file_utils
@@ -80,12 +81,16 @@ class AudioTranscriptor():
             raise Exception("Unkonwn model: " + str(model_dir))
         
         # Transcribe
+        start_time = time.time()
         result = mlx_whisper.transcribe(
             src,
             path_or_hf_repo=model_dir,
             language=lang,
             verbose=True,
         )
+        end_time = time.time()
+        print(f"Transcription finished in {end_time - start_time:.2f} seconds.")
+
         writer = writers.get_writer(format, os.path.dirname(srt_fp))
         writer(result, srt_fp)
         
