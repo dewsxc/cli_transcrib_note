@@ -9,6 +9,9 @@ This CLI tool can input audio or video or zoom record as well.
 
 This project is still on refactoring, you will see lots options still on implement like support Gemini or Whisper.cpp, but it can work with MLX and Claude option, the combination is best for saving money and work on Macbook air.
 
+Even Gemini at 2026, can access Youtube content, the AI can not fetch correct video, whatevery passing channel ID or latest video url, it will fet wrong content. 
+We only could download video and transcribe to subtitle by ourself.
+
 
 ## Features
 
