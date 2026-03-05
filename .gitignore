@@ -6,3 +6,4 @@ resources/channels.yml
 tmp/
 .vscode/
 mlx_models/
+test_md/

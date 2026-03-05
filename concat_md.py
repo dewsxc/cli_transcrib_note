@@ -13,6 +13,12 @@ CHINESE_NUM_MAP = {
     '十': 10
 }
 
+DATE_FORMATS = [
+    "%Y%m%d",
+    "%Y_%m_%d",
+    "%Y-%m-%d"
+]
+
 def chinese_to_int(s):
     """
     Simplistic conversion of Chinese numerals (0-99) to integers.
@@ -42,22 +48,26 @@ def chinese_to_int(s):
     
     return CHINESE_NUM_MAP.get(s, None)
 
-def is_date_filename(filename):
-    """Check if filename matches %Y%m%d format (8 digits)."""
-    # Strip extension
+def parse_date(filename):
+    """Try to parse date from filename stem using supported formats."""
     name = Path(filename).stem
-    if len(name) != 8:
-        return False
-    try:
-        datetime.strptime(name, "%Y%m%d")
-        return True
-    except ValueError:
-        return False
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(name, fmt)
+        except ValueError:
+            continue
+    return None
+
+def is_date_filename(filename):
+    """Check if filename matches any of the supported date formats."""
+    return parse_date(filename) is not None
 
 def get_year_from_date_filename(filename):
-    """Extract %Y from %Y%m%d filename."""
-    name = Path(filename).stem
-    return name[:4]
+    """Extract %Y from date filename."""
+    dt = parse_date(filename)
+    if dt:
+        return dt.strftime("%Y")
+    return None
 
 def natural_sort_key(s):
     """
@@ -128,7 +138,7 @@ def write_concatenated_file(output_path, files, source_dir, strip_markdown=False
                 if strip_markdown:
                     content = remove_markdown(content)
                 else:
-                    outfile.write(f"<!-- Source: {filename} -->\n")
+                    outfile.write(f"# Source: {filename}\n\n")
                 
                 outfile.write(content)
                 
@@ -161,19 +171,27 @@ def concat_md_files(directory_path, output_path=None, test_mode=False, extension
         return
 
     # Separate date-named files and others
-    date_files = [f for f in md_files if is_date_filename(f)]
-    other_files = [f for f in md_files if not is_date_filename(f)]
+    date_files_with_dt = []
+    other_files = []
+    
+    for f in md_files:
+        dt = parse_date(f)
+        if dt:
+            date_files_with_dt.append((f, dt))
+        else:
+            other_files.append(f)
 
-    # 1. Sort date files by date (oldest to latest)
-    date_files.sort()
+    # 1. Sort date files by actual date object (oldest to latest)
+    date_files_with_dt.sort(key=lambda x: x[1])
+    date_files = [x[0] for x in date_files_with_dt]
 
     # 2. Sort other files by natural/meaningful order
     other_files.sort(key=natural_sort_key)
 
-    # Group date files by year
+    # Group sorted date files by year
     date_files_by_year = defaultdict(list)
-    for f in date_files:
-        year = get_year_from_date_filename(f)
+    for f, dt in date_files_with_dt:
+        year = dt.strftime("%Y")
         date_files_by_year[year].append(f)
 
     # Determine actions
@@ -181,7 +199,7 @@ def concat_md_files(directory_path, output_path=None, test_mode=False, extension
         print(f"Test Mode: Source directory: '{directory_path}'")
         print(f"Target extension: '{extension}' (Strip Markdown: {strip_markdown})")
         if date_files:
-            print("\nDate-named files grouped by year:")
+            print("\nDate-named files grouped by year (sorted chronologically):")
             for year in sorted(date_files_by_year.keys()):
                 print(f"  Year {year}:")
                 for f in date_files_by_year[year]:
@@ -232,7 +250,7 @@ if __name__ == "__main__":
     parser.add_argument("directory", help="Path to the directory containing .md files.")
     parser.add_argument("-t", "--test", action="store_true", help="Test mode: only print the order of files.")
     parser.add_argument("-o", "--output", help="Output path. If directory, date files use year for name. If file path, uses it.")
-    parser.add_argument("-x", "--extension", default=".txt", help="Target file extension. If not .md, markdown format will be removed.")
+    parser.add_argument("-x", "--extension", default=".md", help="Target file extension (default: .md). If not .md, markdown format is removed.")
     
     args = parser.parse_args()
     
