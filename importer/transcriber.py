@@ -89,7 +89,15 @@ class AudioTranscriptor():
             verbose=True,
         )
         end_time = time.time()
-        print(f"Transcription finished in {end_time - start_time:.2f} seconds.")
+        
+        # Benchmark
+        transcribe_duration = end_time - start_time
+        audio_duration = result.get('segments', [])[-1].get('end', 0) if result.get('segments') else 0
+        ratio = audio_duration / transcribe_duration if transcribe_duration > 0 else 0
+        
+        print(f"Transcription finished in {transcribe_duration:.2f} seconds.")
+        print(f"Audio duration: {audio_duration:.2f} seconds.")
+        print(f"Speedup ratio: {ratio:.2f}x")
 
         writer = writers.get_writer(format, os.path.dirname(srt_fp))
         writer(result, srt_fp)
