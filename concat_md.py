@@ -1,5 +1,4 @@
 import os
-import sys
 import re
 import argparse
 from datetime import datetime
@@ -121,10 +120,19 @@ def remove_markdown(text):
     
     # Remove horizontal rules
     text = re.sub(r'^---$', '', text, flags=re.MULTILINE)
-    
+
+    # Remove unordered list markers (-, *, +)
+    text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
+
+    # Remove ordered list markers (1. 2. etc.)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    # Collapse multiple blank lines into one
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
     return text.strip()
 
-def write_concatenated_file(output_path, files, source_dir, strip_markdown=False):
+def write_concatenated_file(output_path, files, source_dir):
     """Helper to write multiple files into one."""
     # Ensure parent directory exists
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
@@ -134,19 +142,10 @@ def write_concatenated_file(output_path, files, source_dir, strip_markdown=False
             filepath = os.path.join(source_dir, filename)
             with open(filepath, 'r', encoding='utf-8') as infile:
                 content = infile.read()
-                
-                if strip_markdown:
-                    content = remove_markdown(content)
-                else:
-                    outfile.write(f"# Source: {filename}\n\n")
-                
-                outfile.write(content)
-                
+                content = remove_markdown(content)
+                outfile.write(f"## {filename}\n{content}")
                 if i < len(files) - 1:
-                    if strip_markdown:
-                        outfile.write("\n\n" + "="*40 + "\n\n")
-                    else:
-                        outfile.write("\n\n---\n\n") # Separator between files
+                    outfile.write("\n\n")
     print(f"Concatenated {len(files)} files into {output_path}")
 
 def concat_md_files(directory_path, output_path=None, test_mode=False, extension='.md'):
@@ -160,8 +159,6 @@ def concat_md_files(directory_path, output_path=None, test_mode=False, extension
     # Normalize extension (ensure it starts with .)
     if not extension.startswith('.'):
         extension = '.' + extension
-        
-    strip_markdown = (extension.lower() != '.md')
 
     # Get all .md files
     md_files = [f for f in os.listdir(directory_path) if f.endswith('.md')]
@@ -197,7 +194,7 @@ def concat_md_files(directory_path, output_path=None, test_mode=False, extension
     # Determine actions
     if test_mode:
         print(f"Test Mode: Source directory: '{directory_path}'")
-        print(f"Target extension: '{extension}' (Strip Markdown: {strip_markdown})")
+        print(f"Target extension: '{extension}'")
         if date_files:
             print("\nDate-named files grouped by year (sorted chronologically):")
             for year in sorted(date_files_by_year.keys()):
@@ -229,28 +226,28 @@ def concat_md_files(directory_path, output_path=None, test_mode=False, extension
             # If output is a directory, use year for date-named files
             for year, files in date_files_by_year.items():
                 year_output = os.path.join(output_path, f"{year}{extension}")
-                write_concatenated_file(year_output, files, directory_path, strip_markdown)
+                write_concatenated_file(year_output, files, directory_path)
             
             # For other files, use the directory name
             if other_files:
                 other_output = os.path.join(output_path, f"{dir_name}{extension}")
-                write_concatenated_file(other_output, other_files, directory_path, strip_markdown)
+                write_concatenated_file(other_output, other_files, directory_path)
         else:
             # If output is a specific file, combine EVERYTHING
             all_files = date_files + other_files
-            write_concatenated_file(output_path, all_files, directory_path, strip_markdown)
+            write_concatenated_file(output_path, all_files, directory_path)
     else:
         # Default: combined_notes.{ext} in source directory
         all_files = date_files + other_files
         default_output = os.path.join(directory_path, f"combined_notes{extension}")
-        write_concatenated_file(default_output, all_files, directory_path, strip_markdown)
+        write_concatenated_file(default_output, all_files, directory_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Concatenate .md files in a directory.")
     parser.add_argument("directory", help="Path to the directory containing .md files.")
     parser.add_argument("-t", "--test", action="store_true", help="Test mode: only print the order of files.")
     parser.add_argument("-o", "--output", help="Output path. If directory, date files use year for name. If file path, uses it.")
-    parser.add_argument("-x", "--extension", default=".md", help="Target file extension (default: .md). If not .md, markdown format is removed.")
+    parser.add_argument("-x", "--extension", default=".md", help="Target file extension (default: .md).")
     
     args = parser.parse_args()
     
