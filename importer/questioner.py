@@ -1,3 +1,4 @@
+import os
 from utils import content_utils
 
 from setup import ServiceSetup
@@ -106,7 +107,10 @@ class GeminiQuestioner(Querioner):
     def prepare(self):
         super().prepare()
         
-        genai.configure(api_key=self.proj_setup.gc_gemini_api_key)
+        genai.configure(
+            api_key=self.proj_setup.gc_gemini_api_key, 
+            transport="rest",  # Use VPN force SDK use HTTPS instead of gRPC.
+        )
         self.chat = genai.GenerativeModel(self.model, system_instruction=self.init_prompt).start_chat()
 
     def ask(self, prompt):
