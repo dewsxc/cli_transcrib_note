@@ -99,7 +99,22 @@ class YTImporter(AudioImporter):
     def setup(self):
         self.provider = YTVideoProvider(self.args)
         self.transcriptor = YTTranscriptor(self.args)
-    
+
+    def start_import(self):
+        if getattr(self.args, 'download_only', False):
+            fmt = getattr(self.args, 'format', None)
+            audio_only = getattr(self.args, 'audio_only', False)
+            for src in self.provider.get_info():
+                if not src:
+                    continue
+                output_dir = getattr(self.args, 'output', None)
+                quality = getattr(self.args, 'quality', 'high')
+                fp = self.provider.download_with_format(src, fmt, audio_only, output_dir, quality)
+                if fp:
+                    print(f"Downloaded: {fp}")
+            return
+        super().start_import()
+
     def save(self, page, qa_list, src:YTVideoSrcInfo):
         if page:
             self.output_helper.save_summary_under_page_with_url(page, qa_list,src.video_url, src.srt_fp)

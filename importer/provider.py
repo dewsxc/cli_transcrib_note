@@ -215,6 +215,59 @@ class YTVideoProvider(SourceProvider):
             
         return fp
 
+    _AUDIO_QUALITY_FMT = {
+        'lowest': 'worstaudio/worst',
+        'mid':    'bestaudio[abr<=128]/bestaudio',
+        'high':   'bestaudio/best',
+    }
+    _VIDEO_QUALITY_FMT = {
+        'lowest': 'worstvideo+worstaudio/worst',
+        'mid':    'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+        'high':   None,  # filled in per-container below
+    }
+
+    def download_with_format(self, src: YTVideoSrcInfo, fmt: str = None, audio_only: bool = False, output_dir: str = None, quality: str = 'high') -> str:
+        base_fp = Path(src.default_audio_fp())
+        if output_dir:
+            out_dir = Path(os.path.expanduser(output_dir))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            base_fp = out_dir / base_fp.name
+
+        if audio_only:
+            codec = fmt or 'mp4'
+            fp = base_fp.with_suffix(f'.{codec}').as_posix()
+            if os.path.exists(fp):
+                print("File exists: " + fp)
+                return fp
+            ydl_opts = {
+                'outtmpl': Path(fp).with_suffix("").as_posix(),
+                'format': self._AUDIO_QUALITY_FMT.get(quality, 'bestaudio/best'),
+                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': codec}],
+            }
+        else:
+            container = fmt or 'mp4'
+            fp = base_fp.with_suffix(f'.{container}').as_posix()
+            if os.path.exists(fp):
+                print("File exists: " + fp)
+                return fp
+            if quality == 'high':
+                video_fmt = f'bestvideo[ext={container}]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+            else:
+                video_fmt = self._VIDEO_QUALITY_FMT.get(quality, 'bestvideo+bestaudio/best')
+            ydl_opts = {
+                'outtmpl': Path(fp).with_suffix("").as_posix(),
+                'format': video_fmt,
+                'merge_output_format': container,
+            }
+        try:
+            print("Start download:", src.video_url, "\nto:", fp)
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([src.video_url])
+        except Exception as e:
+            print(f"Failed to download: {e}")
+            return None
+        return fp
+
 
 class YTChannelsLatestVideoProvider(YTVideoProvider):
 
