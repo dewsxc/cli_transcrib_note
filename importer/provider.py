@@ -93,16 +93,18 @@ class YTVideoProvider(SourceProvider):
     def get_src(self, src: YTVideoSrcInfo):
         if self.download_captions(src):
             return src
-        
+
         if self.hd_video:
             downloaded_fp = self.download_hd_video(src)
+        elif getattr(self.args, 'speech_to_text', None) == 'gemini':
+            downloaded_fp = self.download_lowest_quality_audio(src, audio_format=None)
         else:
             downloaded_fp = self.download_lowest_quality_audio(src)
-        
+
         if not downloaded_fp or not os.path.exists(downloaded_fp):
             print("===== Download failed. =====")
             return None
-        
+
         src.set_src_fp_same_as_srt(downloaded_fp)
         return src
 
@@ -177,23 +179,37 @@ class YTVideoProvider(SourceProvider):
         return fp
 
     def download_lowest_quality_audio(self, src: YTVideoSrcInfo, audio_format='.wav'):
+        """Download lowest quality audio. Pass audio_format=None to keep the original format (no FFmpeg conversion)."""
 
-        fp = src.default_audio_fp()
+        base_no_ext = Path(src.default_audio_fp()).with_suffix("").as_posix()
 
-        if os.path.exists(fp):
-            print("Audio exists: " + fp)
-            return fp
-        
-        no_ext_fp = Path(fp).with_suffix("").as_posix()
+        if audio_format is None:
+            # Raw mode: keep native format, capture actual filename via hook.
+            downloaded_fp = [None]
 
-        ydl_opts = {
-            'outtmpl': no_ext_fp,
-            'format': 'worstaudio/worst',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': audio_format.replace(".", ""),
-            }],
-        }
+            def progress_hook(d):
+                if d['status'] == 'finished':
+                    downloaded_fp[0] = d.get('filename')
+
+            ydl_opts = {
+                'outtmpl': base_no_ext + '.%(ext)s',
+                'format': 'worstaudio/worst',
+                'progress_hooks': [progress_hook],
+            }
+        else:
+            fp = src.default_audio_fp()
+            if os.path.exists(fp):
+                print("Audio exists: " + fp)
+                return fp
+
+            ydl_opts = {
+                'outtmpl': base_no_ext,
+                'format': 'worstaudio/worst',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': audio_format.replace(".", ""),
+                }],
+            }
 
         try:
             with YoutubeDL(ydl_opts) as ydl:
@@ -201,10 +217,7 @@ class YTVideoProvider(SourceProvider):
 
         except Exception as e:
             err_msg = str(e).lower()
-            if "members-only content" in err_msg:
-                print(f"The video is member-only, skip: {src.video_url}")
-                return None
-            elif "channel's members" in err_msg:
+            if "members-only content" in err_msg or "channel's members" in err_msg:
                 print(f"The video is member-only, skip: {src.video_url}")
                 return None
             elif "live event will begin in" in err_msg:
@@ -212,8 +225,8 @@ class YTVideoProvider(SourceProvider):
                 return None
             else:
                 raise e
-            
-        return fp
+
+        return downloaded_fp[0] if audio_format is None else fp
 
     _AUDIO_QUALITY_FMT = {
         'lowest': 'worstaudio/worst',

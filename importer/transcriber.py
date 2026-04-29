@@ -38,19 +38,28 @@ class AudioTranscriptor():
 
     def __transcribe(self, lang=None):
         """ Will bypass if file exists. """
-        
+
         if not self.src_info.src_fp or not os.path.exists(self.src_info.src_fp):
             raise Exception("Source is not exists: " + str(self.src_info.src_fp))
-        
+
         tmp = None
         try:
-            if not self.src_info.src_fp.endswith('.wav'):
+            # Gemini receives the raw audio file directly; other backends need wav.
+            if self.args.speech_to_text != 'gemini' and not self.src_info.src_fp.endswith('.wav'):
                 tmp = file_utils.transform_to_audio(self.src_info.src_fp)
 
             # TODO Add Whisper.cpp support.
             print(f"Transcribing with {lang} using {self.args.speech_to_text}: {tmp if tmp else self.src_info.src_fp}")
 
-            if self.args.speech_to_text == 'lightning-whisper-mlx':
+            if self.args.speech_to_text == 'gemini':
+                self.use_gemini(
+                    self.args.proj_setup,
+                    self.src_info.src_fp,
+                    self.src_info.srt_fp,
+                    model_size=self.args.model_size,
+                    lang=lang if lang else self.args.lang,
+                )
+            elif self.args.speech_to_text == 'lightning-whisper-mlx':
                 self.use_lightning_mlx(
                     self.args.proj_setup,
                     tmp if tmp else self.src_info.src_fp,
@@ -83,6 +92,63 @@ class AudioTranscriptor():
         if self.src_info.srt_fp and os.path.exists(self.src_info.srt_fp):
             content_utils.s_to_t(self.src_info.srt_fp)
     
+    def use_gemini(self, proj_setup: ServiceSetup, src, srt_fp, model_size="medium", lang='zh', override=False):
+        import google.generativeai as genai
+
+        _MODEL_MAP = {
+            'small':  'gemini-flash-lite-latest',
+            'medium': 'gemini-flash-latest',
+            'large':  'gemini-pro-latest',
+        }
+        model_name = _MODEL_MAP.get(model_size, 'gemini-flash-latest')
+
+        genai.configure(
+            api_key=proj_setup.gc_gemini_api_key,
+            transport="rest",
+        )
+
+        print(f"Uploading audio to Gemini ({model_name}): {src}")
+        audio_file = genai.upload_file(path=src)
+
+        while audio_file.state.name == "PROCESSING":
+            print("Waiting for Gemini audio file processing...")
+            time.sleep(3)
+            audio_file = genai.get_file(audio_file.name)
+
+        if audio_file.state.name == "FAILED":
+            raise Exception("Gemini audio file processing failed")
+
+        prompt = (
+            f"請將這段音訊轉錄為SRT字幕格式（語言：{lang}），包含準確的時間戳記。"
+            "請只輸出標準SRT格式內容（序號、時間範圍、字幕文字），不需要任何額外說明或Markdown標記。"
+        )
+
+        model = genai.GenerativeModel(model_name)
+        start_time = time.time()
+        response = model.generate_content([prompt, audio_file])
+        end_time = time.time()
+
+        print(f"Gemini transcription finished in {end_time - start_time:.2f} seconds.")
+
+        try:
+            genai.delete_file(audio_file.name)
+        except Exception:
+            pass
+
+        srt_content = response.text.strip()
+        # Strip markdown code fences if Gemini wrapped the output
+        if srt_content.startswith('```'):
+            lines = srt_content.split('\n')
+            inner = lines[1:]
+            if inner and inner[-1].strip() == '```':
+                inner = inner[:-1]
+            srt_content = '\n'.join(inner)
+
+        with open(srt_fp, 'w', encoding='utf-8') as f:
+            f.write(srt_content)
+
+        print(f"SRT written to: {srt_fp}")
+
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.
         

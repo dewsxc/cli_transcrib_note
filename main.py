@@ -14,7 +14,7 @@ def parse_args():
     p.add_argument('--graph', '-g', default='NewsFeed', choices=["NewsFeed", "Trading", "Note", "Test"], help="Save to graph.")
 
     # Whisper
-    p.add_argument('--speech-to-text', '-t', default="mlx-whisper", choices=["lightning-whisper-mlx", "mlx-whisper", "whisper.cpp"], help="Choose whisper models for trascribing.")
+    p.add_argument('--speech-to-text', '-t', default="mlx-whisper", choices=["lightning-whisper-mlx", "mlx-whisper", "whisper.cpp", "gemini"], help="Choose speech-to-text backend for transcribing.")
     p.add_argument('--model-size', '-s', default="large", choices=["small", "medium", "large"], help="Choose model size.")
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
