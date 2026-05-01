@@ -15,6 +15,7 @@ class Querioner:
         self.model = model
         self.chat = None
         self.qa_list = [] # [ (prompt, ans), ....]
+        self.stats = None
 
     def prepare(self):
         """Override to implement for ai model service."""
@@ -73,6 +74,11 @@ class ClaudeQuestioner(Querioner):
             messages=self.wrap_conversation(next_q=prompt)
         )
 
+        if self.stats:
+            self.stats.record_ai(self.model,
+                                 responses.usage.input_tokens,
+                                 responses.usage.output_tokens)
+
         ans = "".join([ chunk.text for chunk in responses.content ])
         self.stash_qa(prompt, ans)
         return ans
@@ -80,19 +86,16 @@ class ClaudeQuestioner(Querioner):
     def summarize_srt(self, q, srt_fp, with_ts=False):
         if not srt_fp:
             return
-        
+
         content = None
         if with_ts:
             with open(srt_fp) as src:
                 content = src.read()
         else:
             content = content_utils.srt_file_to_txt_content(srt_fp)
-                
+
         print("Ask: " + q)
-        ans = self.ask(
-            "\n".join([q, content]), 
-            system_role=self.init_prompt
-        )
+        ans = self.ask("\n".join([q, content]))
         print("Ans:" + ans)
 
 
@@ -119,6 +122,13 @@ class GeminiQuestioner(Querioner):
         except BlockedPromptException as e:
             print(e)
             return 'PROHIBITED_CONTENT'
+
+        if self.stats:
+            usage = getattr(responses, 'usage_metadata', None)
+            if usage:
+                self.stats.record_ai(self.model,
+                                     getattr(usage, 'prompt_token_count', 0) or 0,
+                                     getattr(usage, 'candidates_token_count', 0) or 0)
 
         ans = responses.text
         self.stash_qa(prompt, ans)

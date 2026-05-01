@@ -10,10 +10,32 @@ import mlx_whisper
 from mlx_whisper import writers
 
 
+def _parse_srt_duration(srt_fp):
+    """Return total audio duration in seconds from the last SRT timestamp."""
+    if not srt_fp or not os.path.exists(srt_fp):
+        return 0.0
+    last_end = 0.0
+    try:
+        with open(srt_fp, encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if '-->' in line:
+                    parts = line.split('-->')
+                    end_str = parts[1].strip().split()[0]
+                    h, m, rest = end_str.replace(',', '.').split(':')
+                    secs = int(h) * 3600 + int(m) * 60 + float(rest)
+                    if secs > last_end:
+                        last_end = secs
+    except Exception:
+        pass
+    return last_end
+
+
 class AudioTranscriptor():
 
     def __init__(self, args):
         self.args = args
+        self.stats = None
 
     def start_transcribe(self, src:SourceInfo):
         self.src_info = src
@@ -128,7 +150,8 @@ class AudioTranscriptor():
         response = model.generate_content([prompt, audio_file])
         end_time = time.time()
 
-        print(f"Gemini transcription finished in {end_time - start_time:.2f} seconds.")
+        elapsed = end_time - start_time
+        print(f"Gemini transcription finished in {elapsed:.2f} seconds.")
 
         try:
             genai.delete_file(audio_file.name)
@@ -148,6 +171,13 @@ class AudioTranscriptor():
             f.write(srt_content)
 
         print(f"SRT written to: {srt_fp}")
+
+        if self.stats:
+            audio_duration = _parse_srt_duration(srt_fp)
+            in_tok = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+            out_tok = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+            self.stats.record_stt('gemini', audio_duration, elapsed,
+                                  model=model_name, in_tokens=in_tok, out_tokens=out_tok)
 
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.
@@ -181,7 +211,10 @@ class AudioTranscriptor():
 
         writer = writers.get_writer(format, os.path.dirname(srt_fp))
         writer(result, srt_fp)
-        
+
+        if self.stats:
+            self.stats.record_stt('mlx-whisper', audio_duration, transcribe_duration)
+
         return False
 
     def use_lightning_mlx(self, proj_setup: ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
@@ -249,6 +282,9 @@ class AudioTranscriptor():
 
         writer = writers.get_writer(format, os.path.dirname(srt_fp))
         writer(result, srt_fp)
+
+        if self.stats:
+            self.stats.record_stt('lightning-whisper-mlx', audio_duration, transcribe_duration)
 
         return False
 

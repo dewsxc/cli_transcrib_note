@@ -1,0 +1,43 @@
+# 模型 API 費用表
+# 來源：https://ai.google.dev/gemini-api/docs/pricing
+#       https://www.anthropic.com/pricing
+# 單位：USD / 1M tokens
+# 最後更新：2026-05
+
+gemini:
+  gemini-2.5-flash-lite:
+    input: 0.10
+    output: 0.40
+  gemini-2.5-flash:
+    input: 0.30
+    output: 2.50
+  gemini-2.5-pro:
+    input: 1.25    # ≤200k tokens context；>200k 為 $2.50/1M
+    output: 10.00  # ≤200k tokens context；>200k 為 $15.00/1M
+  # 以下別名目前指向對應的 2.5 系列模型
+  gemini-flash-latest:
+    input: 0.30
+    output: 2.50
+  gemini-flash-lite-latest:
+    input: 0.10
+    output: 0.40
+  gemini-pro-latest:
+    input: 1.25
+    output: 10.00
+
+claude:
+  claude-3-5-haiku-20241022:
+    input: 0.80
+    output: 4.00
+  claude-haiku-4-5-20251001:
+    input: 1.00
+    output: 5.00
+  claude-3-5-sonnet-20241022:
+    input: 3.00
+    output: 15.00
+  claude-sonnet-4-6:
+    input: 3.00
+    output: 15.00
+  claude-opus-4-7:
+    input: 5.00
+    output: 25.00

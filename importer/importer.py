@@ -7,6 +7,7 @@ from importer.transcriber import AudioTranscriptor, YTTranscriptor
 from importer.recorder import SimpleRecorder
 from importer.questioner import get_srt_summarist
 from importer.output_helper import LogseqHelper
+from utils.stats import StatsCollector
 
 
 """
@@ -23,9 +24,13 @@ class AudioImporter:
         self.proj_setup: ServiceSetup = args.proj_setup
         self.output_helper = LogseqHelper(self.proj_setup)
         self.proj_setup.change_to_graph(self.args.graph)
+        self.stats = StatsCollector()
         self.srt_summarist = get_srt_summarist(self.args.ai_model, self.proj_setup)
+        if self.srt_summarist:
+            self.srt_summarist.stats = self.stats
 
         self.setup()
+        self.transcriptor.stats = self.stats
         
     def setup(self):
         """
@@ -37,24 +42,26 @@ class AudioImporter:
     def start_import(self):
 
         for src in self.provider.get_info():
-            
+
             if src.src_fp:
                 print("Get: ", src.src_fp)
             if SimpleRecorder.check_if_had_read(self.args.proj_setup, src.get_main_id(), src.get_id()):
                 print("Already read: {} {}".format(src.get_main_id(), src.get_id()))
                 continue
-            
+
+            self.stats.begin_item(src.get_id())
+
             if not src.is_srt_exists():
                 src = self.provider.get_src(src)
                 if not src:
                     continue
-                
+
                 # If captions were downloaded, src.is_srt_exists() will now be true
                 if not src.is_srt_exists():
                     if not self.transcriptor.start_transcribe(src):
                         print("Skip transcribing: {}".format(src.src_fp))
                         continue
-            
+
             self.srt_summarist.prepare()
             self.srt_summarist.summarize_srt(self.get_prompt(src), src.srt_fp)
 
@@ -62,6 +69,11 @@ class AudioImporter:
             SimpleRecorder.mark_video_as_read(self.args.proj_setup, src.get_main_id(), src.get_id())
 
             self.srt_summarist.close_conversation()
+
+            self.stats.end_item()
+            self.stats.print_item_stats()
+
+        self.stats.print_session_stats()
     
     def get_prompt(self, src):
         """
