@@ -69,26 +69,22 @@ def srt_to_md_list(srt_fp, md_fp, save_start_ts=False):
     """
     with open(srt_fp, 'r') as src, open(md_fp, 'w') as dst:
         start_ts = None
-        count = 0
+        next_is_text = False
         for l in src.readlines():
             raw = l.strip()
             if raw == "":
-                count = 0
-
-            elif count == 0: # idx
-                count += 1
-
-            elif count == 1: # ts
+                continue
+            if '-->' in raw:
                 if save_start_ts:
-                    start_ts = re.findall(r"\d{2}\:\d{2}\:\d{2}", raw)[0]
-                count += 1
-
-            elif count == 2: # line
-                if save_start_ts:
+                    m = re.search(r"[\d:,\.]+", raw)
+                    start_ts = m.group(0) if m else None
+                next_is_text = True
+            elif next_is_text:
+                if save_start_ts and start_ts:
                     dst.write("- {} {}\n".format(start_ts, raw))
                 else:
                     dst.write("- {}\n".format(raw))
-                count = 0
+                next_is_text = False
 
     return True
 

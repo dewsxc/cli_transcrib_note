@@ -10,25 +10,23 @@ import mlx_whisper
 from mlx_whisper import writers
 
 
-def _parse_srt_duration(srt_fp):
-    """Return total audio duration in seconds from the last SRT timestamp."""
-    if not srt_fp or not os.path.exists(srt_fp):
+def _get_audio_duration(fp):
+    """Return audio duration in seconds via ffprobe."""
+    if not fp or not os.path.exists(fp):
         return 0.0
-    last_end = 0.0
     try:
-        with open(srt_fp, encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if '-->' in line:
-                    parts = line.split('-->')
-                    end_str = parts[1].strip().split()[0]
-                    h, m, rest = end_str.replace(',', '.').split(':')
-                    secs = int(h) * 3600 + int(m) * 60 + float(rest)
-                    if secs > last_end:
-                        last_end = secs
+        import subprocess, json
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', fp],
+            capture_output=True, text=True,
+        )
+        for stream in json.loads(result.stdout).get('streams', []):
+            dur = stream.get('duration')
+            if dur:
+                return float(dur)
     except Exception:
         pass
-    return last_end
+    return 0.0
 
 
 class AudioTranscriptor():
@@ -158,7 +156,25 @@ class AudioTranscriptor():
         except Exception:
             pass
 
-        srt_content = response.text.strip()
+        try:
+            srt_content = response.text.strip()
+        except ValueError:
+            # Gemini can return unrecognized finish_reason codes (e.g. 19) when
+            # content is blocked or the response has no parts.  Try to extract
+            # text from candidates directly before giving up.
+            candidates = getattr(response, 'candidates', [])
+            if candidates:
+                parts = getattr(getattr(candidates[0], 'content', None), 'parts', []) or []
+                if parts:
+                    srt_content = parts[0].text.strip()
+                else:
+                    finish_reason = getattr(candidates[0], 'finish_reason', 'unknown')
+                    raise Exception(
+                        f"Gemini returned no content (finish_reason={finish_reason}). "
+                        "Audio may have been blocked by content policy."
+                    )
+            else:
+                raise Exception("Gemini returned no candidates — response was empty.")
         # Strip markdown code fences if Gemini wrapped the output
         if srt_content.startswith('```'):
             lines = srt_content.split('\n')
@@ -173,7 +189,7 @@ class AudioTranscriptor():
         print(f"SRT written to: {srt_fp}")
 
         if self.stats:
-            audio_duration = _parse_srt_duration(srt_fp)
+            audio_duration = _get_audio_duration(src)
             in_tok = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
             out_tok = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
             self.stats.record_stt('gemini', audio_duration, elapsed,
