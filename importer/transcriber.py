@@ -183,6 +183,8 @@ class AudioTranscriptor():
                 inner = inner[:-1]
             srt_content = '\n'.join(inner)
 
+        srt_content = content_utils.normalize_srt(srt_content)
+
         with open(srt_fp, 'w', encoding='utf-8') as f:
             f.write(srt_content)
 
