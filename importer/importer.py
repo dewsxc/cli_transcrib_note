@@ -60,6 +60,8 @@ class AudioImporter:
                 if not src.is_srt_exists():
                     if not self.transcriptor.start_transcribe(src):
                         print("Skip transcribing: {}".format(src.src_fp))
+                        self.stats.end_item()
+                        self.stats.print_item_stats()
                         continue
 
             self.srt_summarist.prepare()

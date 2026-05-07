@@ -78,13 +78,19 @@ class StatsCollector:
     # Recording
     # ------------------------------------------------------------------ #
 
-    def record_stt(self, backend, audio_duration, proc_time, model=None, in_tokens=0, out_tokens=0):
+    def record_stt(self, backend, audio_duration, proc_time, model=None, in_tokens=0, out_tokens=0, retry_time=0.0, retry_count=0, retry_in_tokens=0, retry_out_tokens=0):
         cost = self._calc_cost(model, in_tokens, out_tokens) if model else 0.0
+        retry_cost = self._calc_cost(model, retry_in_tokens, retry_out_tokens) if model else 0.0
         self._item_stt.append({
             'backend': backend,
             'model': model,
             'audio_duration': audio_duration,
             'proc_time': proc_time,
+            'retry_time': retry_time,
+            'retry_count': retry_count,
+            'retry_in_tokens': retry_in_tokens,
+            'retry_out_tokens': retry_out_tokens,
+            'retry_cost': retry_cost,
             'in_tokens': in_tokens,
             'out_tokens': out_tokens,
             'cost': cost,
@@ -116,6 +122,9 @@ class StatsCollector:
             tag = r['model'] or r['backend']
             lines.append(f"\nSpeech-to-Text ({tag}):")
             lines.append(f"  音訊時長: {_fmt_duration(r['audio_duration'])} / 轉錄耗時: {_fmt_duration(r['proc_time'])} / 速率: {ratio:.1f}x")
+            if r.get('retry_count', 0) > 0:
+                lines.append(f"  重試: {r['retry_count']} 次 / 重試耗時: {_fmt_duration(r['retry_time'])}")
+                lines.append(f"  重試 Tokens: {_fmt_tokens(r['retry_in_tokens'])} 輸入 / {_fmt_tokens(r['retry_out_tokens'])} 輸出 / 成本: ${r['retry_cost']:.4f} USD")
             if r['in_tokens'] or r['out_tokens']:
                 lines.append(f"  Tokens: {_fmt_tokens(r['in_tokens'])} 輸入 / {_fmt_tokens(r['out_tokens'])} 輸出")
                 lines.append(f"  成本: ${r['cost']:.4f} USD")
@@ -145,9 +154,14 @@ class StatsCollector:
         for r in self._session_stt:
             key = r['model'] or r['backend']
             if key not in stt_groups:
-                stt_groups[key] = {'audio': 0.0, 'proc': 0.0, 'in': 0, 'out': 0, 'cost': 0.0}
+                stt_groups[key] = {'audio': 0.0, 'proc': 0.0, 'retry': 0.0, 'retry_count': 0, 'retry_in': 0, 'retry_out': 0, 'retry_cost': 0.0, 'in': 0, 'out': 0, 'cost': 0.0}
             stt_groups[key]['audio'] += r['audio_duration']
             stt_groups[key]['proc'] += r['proc_time']
+            stt_groups[key]['retry'] += r.get('retry_time', 0)
+            stt_groups[key]['retry_count'] += r.get('retry_count', 0)
+            stt_groups[key]['retry_in'] += r.get('retry_in_tokens', 0)
+            stt_groups[key]['retry_out'] += r.get('retry_out_tokens', 0)
+            stt_groups[key]['retry_cost'] += r.get('retry_cost', 0.0)
             stt_groups[key]['in'] += r['in_tokens']
             stt_groups[key]['out'] += r['out_tokens']
             stt_groups[key]['cost'] += r['cost']
@@ -156,6 +170,9 @@ class StatsCollector:
             ratio = g['audio'] / g['proc'] if g['proc'] > 0 else 0
             lines.append(f"\nSTT 總計 ({key}):")
             lines.append(f"  總音訊: {_fmt_duration(g['audio'])} / 轉錄耗時: {_fmt_duration(g['proc'])} / 平均速率: {ratio:.1f}x")
+            if g['retry_count'] > 0:
+                lines.append(f"  總重試: {g['retry_count']} 次 / 重試耗時: {_fmt_duration(g['retry'])}")
+                lines.append(f"  重試 Tokens: {_fmt_tokens(g['retry_in'])} in / {_fmt_tokens(g['retry_out'])} out / 成本: ${g['retry_cost']:.4f}")
             if g['in'] or g['out']:
                 lines.append(f"  Tokens: {_fmt_tokens(g['in'])} in / {_fmt_tokens(g['out'])} out / 成本: ${g['cost']:.4f}")
 

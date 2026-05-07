@@ -1,10 +1,16 @@
 import os
+import re
 import time
 
 from utils import content_utils
 from utils import file_utils
 from setup import ServiceSetup
 from importer.provider import SourceInfo
+
+
+class CoverageIncompleteError(Exception):
+    """Raised when Gemini cannot produce sufficient coverage after all retries."""
+    pass
 
 import mlx_whisper
 from mlx_whisper import writers
@@ -27,6 +33,30 @@ def _get_audio_duration(fp):
     except Exception:
         pass
     return 0.0
+
+
+def _get_srt_end_seconds(srt_content: str) -> float:
+    """Return the end timestamp (seconds) of the last SRT entry, or 0 if unparseable."""
+    matches = re.findall(r'-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d+)', srt_content)
+    if not matches:
+        return 0.0
+    h, m, s, ms = matches[-1]
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+
+def _get_srt_entry_count(srt_content: str) -> int:
+    return len(re.findall(r'-->', srt_content))
+
+
+def _is_srt_monolithic(srt_content: str, audio_duration: float) -> bool:
+    """True if the SRT has far too few entries relative to audio length."""
+    count = _get_srt_entry_count(srt_content)
+    min_expected = max(2, audio_duration / 30)
+    return count < min_expected
+
+
+_GEMINI_MAX_RETRIES = 3
+_GEMINI_COVERAGE_THRESHOLD = 0.85
 
 
 class AudioTranscriptor():
@@ -99,6 +129,11 @@ class AudioTranscriptor():
             if tmp and os.path.exists(tmp):
                 os.remove(tmp)
 
+        except CoverageIncompleteError:
+            if tmp and os.path.exists(tmp):
+                os.remove(tmp)
+            return False
+
         except Exception as e:
             print(e)
             if tmp and os.path.exists(tmp):
@@ -127,63 +162,136 @@ class AudioTranscriptor():
             transport="rest",
         )
 
-        print(f"Uploading audio to Gemini ({model_name}): {src}")
-        audio_file = genai.upload_file(path=src)
-
-        while audio_file.state.name == "PROCESSING":
-            print("Waiting for Gemini audio file processing...")
-            time.sleep(3)
-            audio_file = genai.get_file(audio_file.name)
-
-        if audio_file.state.name == "FAILED":
-            raise Exception("Gemini audio file processing failed")
-
-        prompt = (
+        base_prompt = (
             f"請將這段音訊轉錄為SRT字幕格式（語言：{lang}），包含準確的時間戳記。"
             "請只輸出標準SRT格式內容（序號、時間範圍、字幕文字），不需要任何額外說明或Markdown標記。"
         )
+        retry_prompt = base_prompt + "每個字幕條目只能包含一句話或約10個字，不可將所有內容放入單一條目。"
 
         model = genai.GenerativeModel(model_name)
-        start_time = time.time()
-        response = model.generate_content([prompt, audio_file])
-        end_time = time.time()
+        audio_duration = _get_audio_duration(src)
 
-        elapsed = end_time - start_time
-        print(f"Gemini transcription finished in {elapsed:.2f} seconds.")
+        retry_elapsed = 0.0  # time spent on failed attempts
+        last_elapsed = 0.0   # time spent on the final accepted attempt
+        total_in_tok = 0
+        total_out_tok = 0
+        retry_in_tok = 0     # tokens from failed retry attempts
+        retry_out_tok = 0
+        srt_content = None
 
-        try:
-            genai.delete_file(audio_file.name)
-        except Exception:
-            pass
+        for attempt in range(1, _GEMINI_MAX_RETRIES + 1):
+            prompt = base_prompt if attempt == 1 else retry_prompt
+            print(f"Uploading audio to Gemini ({model_name}): {src}")
+            audio_file = genai.upload_file(path=src)
 
-        try:
-            srt_content = response.text.strip()
-        except ValueError:
-            # Gemini can return unrecognized finish_reason codes (e.g. 19) when
-            # content is blocked or the response has no parts.  Try to extract
-            # text from candidates directly before giving up.
-            candidates = getattr(response, 'candidates', [])
-            if candidates:
-                parts = getattr(getattr(candidates[0], 'content', None), 'parts', []) or []
-                if parts:
-                    srt_content = parts[0].text.strip()
+            while audio_file.state.name == "PROCESSING":
+                print("Waiting for Gemini audio file processing...")
+                time.sleep(3)
+                audio_file = genai.get_file(audio_file.name)
+
+            if audio_file.state.name == "FAILED":
+                raise Exception("Gemini audio file processing failed")
+
+            start_time = time.time()
+            response = model.generate_content([prompt, audio_file])
+            elapsed = time.time() - start_time
+            last_elapsed = elapsed
+            print(f"Gemini transcription finished in {elapsed:.2f} seconds.")
+
+            try:
+                genai.delete_file(audio_file.name)
+            except Exception:
+                pass
+
+            attempt_in_tok = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+            attempt_out_tok = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+            total_in_tok += attempt_in_tok
+            total_out_tok += attempt_out_tok
+
+            try:
+                raw = response.text.strip()
+            except ValueError:
+                candidates = getattr(response, 'candidates', [])
+                if candidates:
+                    parts = getattr(getattr(candidates[0], 'content', None), 'parts', []) or []
+                    if parts:
+                        raw = parts[0].text.strip()
+                    else:
+                        finish_reason = getattr(candidates[0], 'finish_reason', 'unknown')
+                        msg = (
+                            f"Gemini returned no content (finish_reason={finish_reason}). "
+                            "Audio may have been blocked by content policy."
+                        )
+                        # finish_reason 3=SAFETY, 4=RECITATION — unretryable; skip gracefully
+                        if finish_reason in (3, 4):
+                            print(msg + " Skipping item.")
+                            raise CoverageIncompleteError(msg)
+                        raise Exception(msg)
                 else:
-                    finish_reason = getattr(candidates[0], 'finish_reason', 'unknown')
-                    raise Exception(
-                        f"Gemini returned no content (finish_reason={finish_reason}). "
-                        "Audio may have been blocked by content policy."
-                    )
-            else:
-                raise Exception("Gemini returned no candidates — response was empty.")
-        # Strip markdown code fences if Gemini wrapped the output
-        if srt_content.startswith('```'):
-            lines = srt_content.split('\n')
-            inner = lines[1:]
-            if inner and inner[-1].strip() == '```':
-                inner = inner[:-1]
-            srt_content = '\n'.join(inner)
+                    raise Exception("Gemini returned no candidates — response was empty.")
 
-        srt_content = content_utils.normalize_srt(srt_content)
+            if raw.startswith('```'):
+                lines = raw.split('\n')
+                inner = lines[1:]
+                if inner and inner[-1].strip() == '```':
+                    inner = inner[:-1]
+                raw = '\n'.join(inner)
+
+            srt_content = content_utils.normalize_srt(raw)
+
+            needs_retry = False
+            retry_reason = None
+            if audio_duration > 0:
+                srt_end = _get_srt_end_seconds(srt_content)
+                coverage = srt_end / audio_duration
+                if coverage < _GEMINI_COVERAGE_THRESHOLD:
+                    print(
+                        f"Incomplete transcription (attempt {attempt}/{_GEMINI_MAX_RETRIES}): "
+                        f"SRT ends at {srt_end:.0f}s but audio is {audio_duration:.0f}s "
+                        f"({coverage*100:.1f}% coverage). Retrying..."
+                    )
+                    needs_retry = True
+                    retry_reason = 'coverage'
+                elif _is_srt_monolithic(srt_content, audio_duration):
+                    entry_count = _get_srt_entry_count(srt_content)
+                    print(
+                        f"Monolithic SRT detected (attempt {attempt}/{_GEMINI_MAX_RETRIES}): "
+                        f"only {entry_count} entries for {audio_duration:.0f}s audio. Retrying..."
+                    )
+                    needs_retry = True
+                    retry_reason = 'monolithic'
+                else:
+                    entry_count = _get_srt_entry_count(srt_content)
+                    warn = " (WARNING: timestamps exceed audio length)" if coverage > 1.1 else ""
+                    print(f"Coverage {coverage*100:.1f}% / {entry_count} entries — accepted.{warn}")
+
+            if needs_retry and attempt < _GEMINI_MAX_RETRIES:
+                retry_elapsed += last_elapsed
+                retry_in_tok += attempt_in_tok
+                retry_out_tok += attempt_out_tok
+                continue
+
+            if needs_retry and retry_reason == 'coverage':
+                print(
+                    f"Max retries reached; coverage still insufficient. "
+                    "Skipping item — will retry on next run."
+                )
+                # All attempts failed — all tokens are wasted
+                retry_in_tok += attempt_in_tok
+                retry_out_tok += attempt_out_tok
+                if self.stats:
+                    self.stats.record_stt('gemini', audio_duration, last_elapsed,
+                                          model=model_name, in_tokens=total_in_tok, out_tokens=total_out_tok,
+                                          retry_time=retry_elapsed, retry_count=attempt - 1,
+                                          retry_in_tokens=retry_in_tok, retry_out_tokens=retry_out_tok)
+                raise CoverageIncompleteError(
+                    f"SRT coverage insufficient after {_GEMINI_MAX_RETRIES} attempts "
+                    f"({coverage*100:.1f}% < {_GEMINI_COVERAGE_THRESHOLD*100:.0f}%)"
+                )
+
+            if needs_retry:
+                print("Max retries reached (monolithic SRT); saving best result so far.")
+            break
 
         with open(srt_fp, 'w', encoding='utf-8') as f:
             f.write(srt_content)
@@ -191,11 +299,10 @@ class AudioTranscriptor():
         print(f"SRT written to: {srt_fp}")
 
         if self.stats:
-            audio_duration = _get_audio_duration(src)
-            in_tok = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
-            out_tok = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
-            self.stats.record_stt('gemini', audio_duration, elapsed,
-                                  model=model_name, in_tokens=in_tok, out_tokens=out_tok)
+            self.stats.record_stt('gemini', audio_duration, last_elapsed,
+                                  model=model_name, in_tokens=total_in_tok, out_tokens=total_out_tok,
+                                  retry_time=retry_elapsed, retry_count=attempt - 1,
+                                  retry_in_tokens=retry_in_tok, retry_out_tokens=retry_out_tok)
 
     def use_mlx(self, proj_setup:ServiceSetup, src, srt_fp, format='srt', model_size="small", lang='zh', override=False):
         # Use mlx framework.

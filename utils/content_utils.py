@@ -8,12 +8,14 @@ from zhconv import convert
 
 
 # Timestamp: HH:MM:SS,mmm  or  HH:MM:SS.mmm  or  HH:MM:SS  (no ms)
-_TS = r'\d{2}:\d{2}:\d{2}(?:[,\.]\d+)?'
+# Also handles Gemini's compact MM:SS:mmm format (e.g. 02:22:450)
+_TS = r'(?:\d{1,2}:\d{2}:\d{3}|\d{2}:\d{2}:\d{2}(?:[,\.]\d+)?)'
 
 # Line-level patterns tried in order (most specific first)
-_P_SEQ_TS_ARR_TS_TXT = re.compile(r'^(\d+)\s+(' + _TS + r')\s*-->\s*(' + _TS + r')\s+(.+)$')
-_P_TS_ARR_TS_TXT     = re.compile(r'^(' + _TS + r')\s*-->\s*(' + _TS + r')\s+(.+)$')
-_P_TS_ARR_TS         = re.compile(r'^(' + _TS + r')\s*-->\s*(' + _TS + r')\s*$')
+# --?> matches both standard --> and Gemini's single-dash ->
+_P_SEQ_TS_ARR_TS_TXT = re.compile(r'^(\d+)\s+(' + _TS + r')\s*--?>\s*(' + _TS + r')\s+(.+)$')
+_P_TS_ARR_TS_TXT     = re.compile(r'^(' + _TS + r')\s*--?>\s*(' + _TS + r')\s+(.+)$')
+_P_TS_ARR_TS         = re.compile(r'^(' + _TS + r')\s*--?>\s*(' + _TS + r')\s*$')
 _P_SEQ_TS_TS_TXT     = re.compile(r'^(\d+)\s+(' + _TS + r')\s+(' + _TS + r')\s+(.+)$')
 _P_SEQ_TS_TS         = re.compile(r'^(\d+)\s+(' + _TS + r')\s+(' + _TS + r')\s*$')
 _P_TS_TS_TXT         = re.compile(r'^(' + _TS + r')\s+(' + _TS + r')\s+(.+)$')
@@ -22,7 +24,14 @@ _P_SEQ_ONLY          = re.compile(r'^\d+$')
 
 
 def _fmt_ts(ts: str) -> str:
-    ts = ts.strip().replace('.', ',')
+    ts = ts.strip()
+    # Gemini compact format: MM:SS:mmm (e.g. 02:22:450) → HH:MM:SS,mmm
+    m = re.match(r'^(\d{1,2}):(\d{2}):(\d{3})$', ts)
+    if m:
+        total_mm, ss, mmm = int(m.group(1)), int(m.group(2)), m.group(3)
+        hh, mm = divmod(total_mm, 60)
+        return f'{hh:02d}:{mm:02d}:{ss:02d},{mmm}'
+    ts = ts.replace('.', ',')
     if not re.search(r',\d+$', ts):
         ts += ',000'
     return ts
