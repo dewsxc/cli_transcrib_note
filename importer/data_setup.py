@@ -58,6 +58,7 @@ class YTVideoSrcInfo(SourceInfo):
         self.video_url = video_data.get('webpage_url')
         self.watch_url = self.video_url # Alias for consistency
         self.subtitles = video_data.get('subtitles')
+        self.automatic_captions = video_data.get('automatic_captions')
 
         self.set_src_fp_same_as_srt(self.default_audio_fp())
 

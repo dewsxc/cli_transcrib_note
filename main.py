@@ -15,6 +15,7 @@ def parse_args():
 
     # Whisper
     p.add_argument('--speech-to-text', '-t', default="mlx-whisper", choices=["lightning-whisper-mlx", "mlx-whisper", "whisper.cpp", "gemini"], help="Choose speech-to-text backend for transcribing.")
+    p.add_argument('--no-captions', action='store_true', help="Skip YouTube captions and force speech-to-text (whisper/gemini) instead.")
     p.add_argument('--model-size', '-s', default="large", choices=["small", "medium", "large"], help="Choose model size.")
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 

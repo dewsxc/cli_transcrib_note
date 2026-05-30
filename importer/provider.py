@@ -11,6 +11,18 @@ import yaml
 import requests
 
 
+# YouTube now hides formats and caption tracks behind a JS challenge; yt-dlp
+# needs a JS runtime plus the yt-dlp-ejs solver to extract them. Prefer deno
+# (yt-dlp's default), fall back to node. See run_boy.sh / README for install.
+_JS_RUNTIMES = {'deno': {'path': None}, 'node': {'path': None}}
+
+
+def _ydl(opts):
+    """YoutubeDL with the JS runtimes needed to solve YouTube's challenges."""
+    opts.setdefault('js_runtimes', _JS_RUNTIMES)
+    return YoutubeDL(opts)
+
+
 class SourceProvider:
 
     def __init__(self, args):
@@ -58,18 +70,20 @@ class YTVideoProvider(SourceProvider):
         super().__init__(args)
         self.yt_link = args.yt_link if hasattr(args, 'yt_link') else None
         self.hd_video = args.hd_video if hasattr(args, 'hd_video') else False
+        self.no_captions = getattr(args, 'no_captions', False)
     
     def get_info_from_url(self, url)-> YTVideoSrcInfo:
         ydl_opts = {
             'playlist_items': '1',
             'extractor_args': {'youtubetab': {'approximate_date': ['']}},
             'writesubtitles': True,
+            'writeautomaticsub': True,
             'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
             'subtitlesformat': 'srt',
         }
 
         try:
-            with YoutubeDL(ydl_opts) as ydl:
+            with _ydl(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
             return YTVideoSrcInfo(self.args.proj_setup.audio_dir, info)
@@ -91,9 +105,12 @@ class YTVideoProvider(SourceProvider):
         yield self.get_info_from_url(self.args.yt_link)
     
     def get_src(self, src: YTVideoSrcInfo):
-        if self.download_captions(src):
+        # Prefer existing captions (manual > auto) before paying for STT.
+        # --hd-video wants the video file; --no-captions forces STT.
+        if not self.hd_video and not self.no_captions and self.download_captions(src):
             return src
 
+        # No captions: fall back to STT. --speech-to-text selects the backend.
         if self.hd_video:
             downloaded_fp = self.download_hd_video(src)
         elif getattr(self.args, 'speech_to_text', None) == 'gemini':
@@ -108,18 +125,29 @@ class YTVideoProvider(SourceProvider):
         src.set_src_fp_same_as_srt(downloaded_fp)
         return src
 
+    # Priority order for languages (including language variants)
+    _PREFERRED_LANGS = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
+
     def download_captions(self, src: YTVideoSrcInfo):
+        # 1) Manually-uploaded subtitles (best quality).
+        if self.download_manual_captions(src):
+            return True
+        # 2) Auto-generated captions (fallback before paying for STT).
+        if self.download_auto_captions(src):
+            return True
+        print("No manual or automatic captions found for preferred languages: "
+              f"{', '.join(self._PREFERRED_LANGS)}")
+        return False
+
+    def download_manual_captions(self, src: YTVideoSrcInfo):
         preferred_format = 'srt'
-        
-        # Priority order for languages (including language variants)
-        preferred_langs = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
-        
+
         selected_sub_info = None
         selected_lang = None
 
         if src.subtitles:
             print(f"Available subtitles: {list(src.subtitles.keys())}")
-            for lang in preferred_langs:
+            for lang in self._PREFERRED_LANGS:
                 if lang in src.subtitles:
                     for sub in src.subtitles[lang]:
                         if sub.get('ext') == preferred_format:
@@ -128,17 +156,16 @@ class YTVideoProvider(SourceProvider):
                             break
                 if selected_sub_info:
                     break
-        
+
         if not selected_sub_info:
-            print(f"No {preferred_format} subtitles found for preferred languages: {', '.join(preferred_langs)}")
             return False
-            
+
         try:
             subtitle_url = selected_sub_info.get('url')
             if not subtitle_url:
                 print(f"No URL found for {preferred_format} subtitles for language {selected_lang}")
                 return False
-            
+
             print(f"Downloading {selected_lang} captions from: {subtitle_url}")
             response = requests.get(subtitle_url, timeout=30)
             response.raise_for_status()
@@ -151,6 +178,53 @@ class YTVideoProvider(SourceProvider):
 
         except Exception as e:
             print(f"Failed to download {selected_lang} {preferred_format} captions: {e}")
+            return False
+
+    def download_auto_captions(self, src: YTVideoSrcInfo):
+        auto = getattr(src, 'automatic_captions', None)
+        if not auto:
+            return False
+
+        print(f"Available auto-captions: {list(auto.keys())}")
+
+        selected_sub_info = None
+        selected_lang = None
+        for lang in self._PREFERRED_LANGS:
+            subs = auto.get(lang)
+            if not subs:
+                continue
+            # Auto-captions are not offered as srt; prefer vtt, else first available.
+            selected_sub_info = next((s for s in subs if s.get('ext') == 'vtt'), subs[0])
+            selected_lang = lang
+            break
+
+        if not selected_sub_info:
+            return False
+
+        subtitle_url = selected_sub_info.get('url')
+        if not subtitle_url:
+            print(f"No URL found for auto-captions for language {selected_lang}")
+            return False
+
+        selected_ext = selected_sub_info.get('ext')
+        try:
+            print(f"Downloading {selected_lang} auto-captions ({selected_ext}) from: {subtitle_url}")
+            response = requests.get(subtitle_url, timeout=30)
+            response.raise_for_status()
+
+            srt_content = content_utils.vtt_to_srt(response.text) if selected_ext == 'vtt' else response.text
+            if not srt_content.strip():
+                print(f"Auto-captions for {selected_lang} converted to empty content, skip.")
+                return False
+
+            with open(src.srt_fp, 'w', encoding='utf-8') as f:
+                f.write(srt_content)
+            content_utils.s_to_t(src.srt_fp)
+            print(f"Successfully saved {selected_lang} auto-captions to {src.srt_fp}")
+            return True
+
+        except Exception as e:
+            print(f"Failed to download {selected_lang} auto-captions: {e}")
             return False
 
     def download_hd_video(self, src: YTVideoSrcInfo, video_format='.mp4'):
@@ -170,7 +244,7 @@ class YTVideoProvider(SourceProvider):
 
         try:
             print("Start download:", src.video_url, "\nto:", fp)
-            with YoutubeDL(ydl_opts) as ydl:
+            with _ydl(ydl_opts) as ydl:
                 ydl.download([src.video_url])
         except Exception as e:
             print(f"Failed to download HD video: {e}")
@@ -212,7 +286,7 @@ class YTVideoProvider(SourceProvider):
             }
 
         try:
-            with YoutubeDL(ydl_opts) as ydl:
+            with _ydl(ydl_opts) as ydl:
                 ydl.download([src.video_url])
 
         except Exception as e:
@@ -274,7 +348,7 @@ class YTVideoProvider(SourceProvider):
             }
         try:
             print("Start download:", src.video_url, "\nto:", fp)
-            with YoutubeDL(ydl_opts) as ydl:
+            with _ydl(ydl_opts) as ydl:
                 ydl.download([src.video_url])
         except Exception as e:
             print(f"Failed to download: {e}")
@@ -309,12 +383,13 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
                 'extract_flat': 'in_playlist',
                 'extractor_args': {'youtubetab': {'approximate_date': ['']}},
                 'writesubtitles': True,
+                'writeautomaticsub': True,
                 'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
                 'subtitlesformat': 'srt',
             }
 
             try:
-                with YoutubeDL(ydl_opts) as ydl:
+                with _ydl(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
 
             except Exception as e:

@@ -134,6 +134,67 @@ def normalize_srt(srt_content):
     return '\n'.join(result)
 
 
+_VTT_CUE = re.compile(
+    r'^(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})')
+_VTT_TAG = re.compile(r'<[^>]+>')                       # <c>, </c>, <00:00:01.000>, etc.
+_VTT_INLINE_TS = re.compile(r'<\d{2}:\d{2}:\d{2}[.,]\d{3}>')
+
+
+def vtt_to_srt(vtt_content):
+    """Convert WebVTT (incl. YouTube auto-caption VTT) to SRT text.
+
+    YouTube auto-captions use a rolling format where each cue repeats the
+    previously shown line and reveals the next line with inline word-level
+    <hh:mm:ss.mmm><c> ... </c> timing tags. We keep, per cue, the line that
+    carries those inline tags (the freshly spoken words) and drop the repeated
+    lines, then collapse consecutive identical lines. Manually-uploaded VTT
+    (no inline tags) just falls back to its last line, so it converts cleanly
+    too.
+    """
+    lines = vtt_content.split('\n')
+    entries = []  # (start, end, text)
+    i, n = 0, len(lines)
+
+    while i < n:
+        m = _VTT_CUE.match(lines[i].strip())
+        if not m:
+            i += 1
+            continue
+        start, end = m.group(1), m.group(2)
+        i += 1
+
+        # Collect this cue's text until the next cue, skipping blank/separator
+        # lines (YouTube sometimes injects whitespace-only lines mid-cue).
+        text_lines = []
+        while i < n and not _VTT_CUE.match(lines[i].strip()):
+            if lines[i].strip():
+                text_lines.append(lines[i])
+            i += 1
+
+        # Lines carrying inline timing are the freshly-spoken words; if none,
+        # keep only the last line (the most recently revealed one).
+        timed = [l for l in text_lines if _VTT_INLINE_TS.search(l)]
+        candidate_lines = timed if timed else text_lines[-1:]
+
+        text = ' '.join(_VTT_TAG.sub('', l).strip() for l in candidate_lines if l.strip())
+        text = re.sub(r'\s+', ' ', text).strip()
+        if text:
+            entries.append((start.replace('.', ','), end.replace('.', ','), text))
+
+    # Collapse consecutive duplicate lines, extending the end timestamp.
+    deduped = []
+    for s, e, t in entries:
+        if deduped and deduped[-1][2] == t:
+            deduped[-1] = (deduped[-1][0], e, t)
+        else:
+            deduped.append((s, e, t))
+
+    out = []
+    for idx, (s, e, t) in enumerate(deduped, 1):
+        out.extend([str(idx), f'{s} --> {e}', t, ''])
+    return '\n'.join(out)
+
+
 def srt_to_txt(srt_fp, txt_fp, save_start_ts=False):
     """
     Use srt can split sentence by transcript, that make txt more readable.

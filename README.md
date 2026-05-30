@@ -49,6 +49,9 @@ Using web services are very expensive, if you use Apple Silicon Chip series prod
 ### System Requirements
 - Python 3.8+
 - FFmpeg
+- A JavaScript runtime (`node` or `deno`) — required by yt-dlp to solve YouTube's
+  JS challenge for format and caption extraction. Paired with the `yt-dlp-ejs`
+  package (installed by `run_boy.sh`); without it YouTube returns no subtitles.
 - MXL Whisper model
 - Whisper.cpp (optional)
 - Anthropic Service
