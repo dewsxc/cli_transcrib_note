@@ -72,13 +72,29 @@ class YTVideoProvider(SourceProvider):
         self.hd_video = args.hd_video if hasattr(args, 'hd_video') else False
         self.no_captions = getattr(args, 'no_captions', False)
     
-    def get_info_from_url(self, url)-> YTVideoSrcInfo:
+    # Priority order for languages (including language variants)
+    _PREFERRED_LANGS = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
+
+    def _caption_langs(self, src: YTVideoSrcInfo = None, extra_lang: str = None):
+        """Return subtitle languages to request/search, preserving order and removing duplicates."""
+        langs = []
+
+        # Per-channel language from channels.yml should be considered when available.
+        if extra_lang:
+            langs.append(extra_lang)
+        if src and getattr(src, 'lang', None):
+            langs.append(src.lang)
+
+        langs.extend(self._PREFERRED_LANGS)
+        return list(dict.fromkeys(lang for lang in langs if lang))
+
+    def get_info_from_url(self, url, caption_lang: str = None)-> YTVideoSrcInfo:
         ydl_opts = {
             'playlist_items': '1',
             'extractor_args': {'youtubetab': {'approximate_date': ['']}},
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
+            'subtitleslangs': self._caption_langs(extra_lang=caption_lang),
             'subtitlesformat': 'srt',
         }
 
@@ -86,7 +102,10 @@ class YTVideoProvider(SourceProvider):
             with _ydl(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
-            return YTVideoSrcInfo(self.args.proj_setup.audio_dir, info)
+            src = YTVideoSrcInfo(self.args.proj_setup.audio_dir, info)
+            if caption_lang:
+                src.lang = caption_lang
+            return src
         
         except Exception as e:
             err_msg = str(e).lower()
@@ -125,29 +144,28 @@ class YTVideoProvider(SourceProvider):
         src.set_src_fp_same_as_srt(downloaded_fp)
         return src
 
-    # Priority order for languages (including language variants)
-    _PREFERRED_LANGS = ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant']
-
     def download_captions(self, src: YTVideoSrcInfo):
+        caption_langs = self._caption_langs(src)
         # 1) Manually-uploaded subtitles (best quality).
-        if self.download_manual_captions(src):
+        if self.download_manual_captions(src, caption_langs):
             return True
         # 2) Auto-generated captions (fallback before paying for STT).
-        if self.download_auto_captions(src):
+        if self.download_auto_captions(src, caption_langs):
             return True
         print("No manual or automatic captions found for preferred languages: "
-              f"{', '.join(self._PREFERRED_LANGS)}")
+              f"{', '.join(caption_langs)}")
         return False
 
-    def download_manual_captions(self, src: YTVideoSrcInfo):
+    def download_manual_captions(self, src: YTVideoSrcInfo, caption_langs=None):
         preferred_format = 'srt'
+        caption_langs = caption_langs or self._caption_langs(src)
 
         selected_sub_info = None
         selected_lang = None
 
         if src.subtitles:
             print(f"Available subtitles: {list(src.subtitles.keys())}")
-            for lang in self._PREFERRED_LANGS:
+            for lang in caption_langs:
                 if lang in src.subtitles:
                     for sub in src.subtitles[lang]:
                         if sub.get('ext') == preferred_format:
@@ -180,16 +198,17 @@ class YTVideoProvider(SourceProvider):
             print(f"Failed to download {selected_lang} {preferred_format} captions: {e}")
             return False
 
-    def download_auto_captions(self, src: YTVideoSrcInfo):
+    def download_auto_captions(self, src: YTVideoSrcInfo, caption_langs=None):
         auto = getattr(src, 'automatic_captions', None)
         if not auto:
             return False
+        caption_langs = caption_langs or self._caption_langs(src)
 
         print(f"Available auto-captions: {list(auto.keys())}")
 
         selected_sub_info = None
         selected_lang = None
-        for lang in self._PREFERRED_LANGS:
+        for lang in caption_langs:
             subs = auto.get(lang)
             if not subs:
                 continue
@@ -373,6 +392,7 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
 
             print("Checking: " + channel_config.get('channel_name'))
             self.current_channel_config = channel_config
+            channel_lang = channel_config.get('lang', 'zh')
             
             is_live = channel_config.get("is_live", False)
 
@@ -384,7 +404,7 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
                 'extractor_args': {'youtubetab': {'approximate_date': ['']}},
                 'writesubtitles': True,
                 'writeautomaticsub': True,
-                'subtitleslangs': ['zh-TW', 'zh-CN', 'zh', 'zh-Hans', 'zh-Hant'],
+                'subtitleslangs': self._caption_langs(extra_lang=channel_lang),
                 'subtitlesformat': 'srt',
             }
 
@@ -419,7 +439,7 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
                 print(f"Video publish at {pt} is not fresh.")
                 continue
             
-            latest_video.lang = channel_config.get('lang', 'zh')
+            latest_video.lang = channel_lang
             # If want subtitles, need to request video info again, the data in channal info is not included.
             yield latest_video
 
@@ -429,7 +449,7 @@ class YTChannelsLatestVideoProvider(YTVideoProvider):
         v = src
         # Video info from channel list, did not include subtitles and info is minimal, need request again.
         if not src.subtitles:
-            v = self.get_info_from_url(src.video_url)
+            v = self.get_info_from_url(src.video_url, caption_lang=src.lang)
         # Member only video or other can not access.
         if not v:
             return None
