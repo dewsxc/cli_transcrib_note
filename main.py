@@ -16,7 +16,7 @@ def parse_args():
     # Whisper
     p.add_argument('--speech-to-text', '-t', default="mlx-whisper", choices=["lightning-whisper-mlx", "mlx-whisper", "whisper.cpp", "gemini"], help="Choose speech-to-text backend for transcribing.")
     p.add_argument('--no-captions', action='store_true', help="Skip YouTube captions and force speech-to-text (whisper/gemini) instead.")
-    p.add_argument('--model-size', '-s', default="large", choices=["small", "medium", "large"], help="Choose model size.")
+    p.add_argument('--model-size', '-s', default=None, choices=["small", "medium", "large"], help="Choose model size. Default: small for local whisper, medium for gemini.")
     p.add_argument('--lang', '-l', default='zh', help="Assign detected language for transcribing.") # TODO
 
     # AI
@@ -54,6 +54,13 @@ def parse_args():
     zoom_args.add_argument('src_fp', help="Source file path or directory, it will find matched file recursively.")
 
     args = p.parse_args()
+
+    # Local whisper runs on this machine, where small is the sensible default.
+    # Gemini's small tier (flash-lite) translates Chinese audio into English
+    # instead of transcribing it, so the hosted backend starts one tier up.
+    if args.model_size is None:
+        args.model_size = 'medium' if args.speech_to_text == 'gemini' else 'small'
+
     args.proj_setup = ServiceSetup(args.setup)
 
     return args

@@ -139,6 +139,22 @@ Transcribe yt video:
 
 Use `python main.py -h` for more commands.
 
+`--model-size` defaults per backend: `small` for the local whisper models,
+`medium` for `--speech-to-text gemini`. Gemini's small tier (flash-lite)
+translates Chinese audio into English instead of transcribing it, so the hosted
+backend starts one tier up. Pass `-s` explicitly to override either default.
+
+
+## Tests
+
+Standard-library `unittest`, no extra dependency:
+```
+  python -m unittest discover -s tests -t .
+```
+
+They cover the SRT normalization and the Gemini transcription guard-rails
+(upload MIME detection, coverage measurement, and the wrong-language check).
+
 
 ## License
 

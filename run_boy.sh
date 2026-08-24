@@ -6,7 +6,7 @@ source .venv/bin/activate
 pip install -U yt-dlp yt-dlp-ejs
 
 if [ "$1" = "online" ]; then
-  time python main.py --speech-to-text gemini --model-size small news
+  time python main.py --speech-to-text gemini news
 else
   time python main.py news
 fi

@@ -9,39 +9,86 @@ from importer.provider import SourceInfo
 
 
 class CoverageIncompleteError(Exception):
-    """Raised when Gemini cannot produce sufficient coverage after all retries."""
+    """Raised when Gemini cannot produce a usable transcript after all retries.
+
+    Caught by __transcribe() to skip the item gracefully so a batch run keeps
+    going and the item is retried on the next run.
+    """
     pass
 
 import mlx_whisper
 from mlx_whisper import writers
 
 
-def _get_audio_duration(fp):
-    """Return audio duration in seconds via ffprobe."""
+def _ffprobe(fp):
+    """Return parsed ffprobe JSON (format + streams), or {} if it cannot be read."""
     if not fp or not os.path.exists(fp):
-        return 0.0
+        return {}
     try:
         import subprocess, json
         result = subprocess.run(
-            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', fp],
+            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', fp],
             capture_output=True, text=True,
         )
-        for stream in json.loads(result.stdout).get('streams', []):
-            dur = stream.get('duration')
-            if dur:
-                return float(dur)
+        return json.loads(result.stdout)
     except Exception:
-        pass
+        return {}
+
+
+def _get_audio_duration(fp):
+    """Return audio duration in seconds via ffprobe."""
+    for stream in _ffprobe(fp).get('streams', []):
+        dur = stream.get('duration')
+        if dur:
+            return float(dur)
     return 0.0
 
 
+# ffprobe format_name -> the audio MIME type Gemini accepts for that container.
+_AUDIO_MIME_BY_FORMAT = {
+    'aac': 'audio/aac',
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'flac': 'audio/flac',
+    'ogg': 'audio/ogg',
+    'matroska,webm': 'audio/webm',
+    'mov,mp4,m4a,3gp,3g2,mj2': 'audio/mp4',
+}
+
+
+def _detect_gemini_mime(fp):
+    """Return the MIME type to declare when uploading to Gemini, or None to let
+    the SDK infer it from the file extension.
+
+    The extension cannot be trusted: yt-dlp saves YouTube's HLS audio formats as
+    .mp4 while the bytes are actually a raw ADTS AAC stream. And Gemini picks its
+    decoder from the MIME's top-level type, so any audio-only file announced as
+    video/* is handed to the video transcoder and comes back FAILED — that holds
+    even for a genuine MP4 container. So probe the real container and declare
+    audio/* whenever there is no video stream.
+    """
+    probe = _ffprobe(fp)
+    streams = probe.get('streams', [])
+    if not streams:
+        return None  # unprobeable — the extension is the only hint we have
+    # Cover art is stored as a video stream; it does not make the file a video.
+    if any(s.get('codec_type') == 'video' and not s.get('disposition', {}).get('attached_pic')
+           for s in streams):
+        return None
+    return _AUDIO_MIME_BY_FORMAT.get(probe.get('format', {}).get('format_name'))
+
+
 def _get_srt_end_seconds(srt_content: str) -> float:
-    """Return the end timestamp (seconds) of the last SRT entry, or 0 if unparseable."""
+    """Return the latest end timestamp (seconds) in the SRT, or 0 if unparseable.
+
+    Uses the maximum rather than the last entry: Gemini sometimes emits cues out
+    of chronological order, which would otherwise under-report the coverage.
+    """
     matches = re.findall(r'-->\s*(\d{2}):(\d{2}):(\d{2})[,\.](\d+)', srt_content)
     if not matches:
         return 0.0
-    h, m, s, ms = matches[-1]
-    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+    return max(int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+               for h, m, s, ms in matches)
 
 
 def _get_srt_entry_count(srt_content: str) -> int:
@@ -55,8 +102,48 @@ def _is_srt_monolithic(srt_content: str, audio_duration: float) -> bool:
     return count < min_expected
 
 
+# Gemini follows a named language far more reliably than a bare code, and has to
+# be told not to translate: asked for "語言：zh" it will happily return a Chinese
+# recording as English subtitles.
+_LANG_NAMES = {
+    'zh': '中文', 'zh-tw': '中文', 'zh-cn': '中文', 'zh-hans': '中文', 'zh-hant': '中文',
+    'en': 'English', 'ja': '日本語', 'ko': '한국어',
+}
+
+_CJK_RE = re.compile(r'[\u4e00-\u9fff]')
+_LATIN_RE = re.compile(r'[A-Za-z]')
+
+
+def _srt_text_only(srt_content: str) -> str:
+    """Strip sequence numbers and timestamp lines, leaving just the subtitle text."""
+    return '\n'.join(ln for ln in srt_content.splitlines()
+                     if '-->' not in ln and not ln.strip().isdigit())
+
+
+def _is_wrong_language(srt_content: str, lang: str) -> bool:
+    """True if a Chinese transcript came back in Latin script, i.e. translated.
+
+    Only Chinese is checked: it is what this pipeline targets, and CJK-vs-Latin
+    script is a signal we can trust without a language-detection dependency.
+    """
+    if not (lang or '').lower().startswith('zh'):
+        return False
+    text = _srt_text_only(srt_content)
+    return len(_LATIN_RE.findall(text)) > len(_CJK_RE.findall(text))
+
+
 _GEMINI_MAX_RETRIES = 3
 _GEMINI_COVERAGE_THRESHOLD = 0.85
+# Past this much of the audio length the timestamps are hallucinated, not drift.
+_GEMINI_OVERRUN_THRESHOLD = 1.25
+
+# Extra instruction added on a retry, aimed at whatever the previous attempt got wrong.
+_RETRY_HINTS = {
+    'language':   "注意：上一次你把內容翻譯成了其他語言，這是錯的。請逐字轉錄，保持與音訊完全相同的語言。",
+    'coverage':   "注意：上一次只轉錄了前面一小段就停了。請務必轉錄到音訊的最後一秒。",
+    'overrun':    "注意：上一次的時間戳超出了音訊長度。請重新校準，最後一個時間戳必須接近音訊結尾。",
+    'monolithic': "注意：上一次把大段內容塞進單一條目。請每個條目只放一句話（約 10-20 字）。",
+}
 
 
 class AudioTranscriptor():
@@ -162,14 +249,28 @@ class AudioTranscriptor():
             transport="rest",
         )
 
-        base_prompt = (
-            f"請將這段音訊轉錄為SRT字幕格式（語言：{lang}），包含準確的時間戳記。"
-            "請只輸出標準SRT格式內容（序號、時間範圍、字幕文字），不需要任何額外說明或Markdown標記。"
-        )
-        retry_prompt = base_prompt + "每個字幕條目只能包含一句話或約10個字，不可將所有內容放入單一條目。"
-
         model = genai.GenerativeModel(model_name)
         audio_duration = _get_audio_duration(src)
+
+        lang_name = _LANG_NAMES.get((lang or '').lower(), lang)
+        total = int(audio_duration)
+        length_rule = (
+            f"2. 音訊總長度為 {total // 60} 分 {total % 60} 秒（共 {total} 秒）。所有時間戳都必須落在 "
+            f"00:00:00,000 到 {total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d},000 之間，"
+            "且必須由小到大遞增。\n"
+        ) if audio_duration > 0 else "2. 所有時間戳都必須由小到大遞增。\n"
+
+        base_prompt = (
+            "請將這段音訊逐字轉錄成 SRT 字幕檔。\n"
+            f"1. 語言：音訊內容是{lang_name}，字幕必須用{lang_name}逐字記錄原話，"
+            "嚴禁翻譯成英文或任何其他語言。\n"
+            + length_rule +
+            "3. 時間戳格式必須是 HH:MM:SS,mmm（兩位小時:兩位分鐘:兩位秒,三位毫秒），"
+            "例如 00:01:05,360。禁止使用 MM:SS.mmm、方括號或任何其他格式。\n"
+            "4. 每個字幕條目只包含一句話（約 10-20 字），不可把大段內容塞進單一條目。\n"
+            "5. 只輸出標準 SRT：序號一行、時間範圍一行、字幕文字一行、條目間空一行。"
+            "不要任何說明文字或 Markdown 標記。"
+        )
 
         retry_elapsed = 0.0  # time spent on failed attempts
         last_elapsed = 0.0   # time spent on the final accepted attempt
@@ -179,10 +280,12 @@ class AudioTranscriptor():
         retry_out_tok = 0
         srt_content = None
 
+        retry_reason = None
         for attempt in range(1, _GEMINI_MAX_RETRIES + 1):
-            prompt = base_prompt if attempt == 1 else retry_prompt
+            hint = _RETRY_HINTS.get(retry_reason)
+            prompt = base_prompt + ("\n\n" + hint if hint else "")
             print(f"Uploading audio to Gemini ({model_name}): {src}")
-            audio_file = genai.upload_file(path=src)
+            audio_file = genai.upload_file(path=src, mime_type=_detect_gemini_mime(src))
 
             while audio_file.state.name == "PROCESSING":
                 print("Waiting for Gemini audio file processing...")
@@ -190,7 +293,10 @@ class AudioTranscriptor():
                 audio_file = genai.get_file(audio_file.name)
 
             if audio_file.state.name == "FAILED":
-                raise Exception("Gemini audio file processing failed")
+                raise Exception(
+                    f"Gemini audio file processing failed (mime_type={audio_file.mime_type}, "
+                    f"error={getattr(audio_file, 'error', None)}): {src}"
+                )
 
             start_time = time.time()
             response = model.generate_content([prompt, audio_file])
@@ -241,7 +347,17 @@ class AudioTranscriptor():
 
             needs_retry = False
             retry_reason = None
-            if audio_duration > 0:
+            coverage = 0.0
+
+            if _is_wrong_language(srt_content, lang):
+                print(
+                    f"Wrong language (attempt {attempt}/{_GEMINI_MAX_RETRIES}): asked for "
+                    f"{lang_name} but got Latin script — the model translated instead of "
+                    "transcribing. Retrying..."
+                )
+                needs_retry = True
+                retry_reason = 'language'
+            elif audio_duration > 0:
                 srt_end = _get_srt_end_seconds(srt_content)
                 coverage = srt_end / audio_duration
                 if coverage < _GEMINI_COVERAGE_THRESHOLD:
@@ -252,6 +368,14 @@ class AudioTranscriptor():
                     )
                     needs_retry = True
                     retry_reason = 'coverage'
+                elif coverage > _GEMINI_OVERRUN_THRESHOLD:
+                    print(
+                        f"Hallucinated timestamps (attempt {attempt}/{_GEMINI_MAX_RETRIES}): "
+                        f"SRT ends at {srt_end:.0f}s but audio is only {audio_duration:.0f}s "
+                        f"({coverage*100:.1f}% coverage). Retrying..."
+                    )
+                    needs_retry = True
+                    retry_reason = 'overrun'
                 elif _is_srt_monolithic(srt_content, audio_duration):
                     entry_count = _get_srt_entry_count(srt_content)
                     print(
@@ -270,6 +394,26 @@ class AudioTranscriptor():
                 retry_in_tok += attempt_in_tok
                 retry_out_tok += attempt_out_tok
                 continue
+
+            if needs_retry and retry_reason == 'language':
+                # No amount of retrying fixes this: the weaker models ignore the
+                # no-translation instruction every single time.
+                print(
+                    f"Max retries reached; '{model_name}' keeps translating {lang_name} audio "
+                    "into English instead of transcribing it. Skipping item — use a larger "
+                    "--model-size for this channel."
+                )
+                retry_in_tok += attempt_in_tok
+                retry_out_tok += attempt_out_tok
+                if self.stats:
+                    self.stats.record_stt('gemini', audio_duration, last_elapsed,
+                                          model=model_name, in_tokens=total_in_tok, out_tokens=total_out_tok,
+                                          retry_time=retry_elapsed, retry_count=attempt - 1,
+                                          retry_in_tokens=retry_in_tok, retry_out_tokens=retry_out_tok)
+                raise CoverageIncompleteError(
+                    f"'{model_name}' translated the {lang_name} audio to English on all "
+                    f"{_GEMINI_MAX_RETRIES} attempts"
+                )
 
             if needs_retry and retry_reason == 'coverage':
                 print(
@@ -290,7 +434,7 @@ class AudioTranscriptor():
                 )
 
             if needs_retry:
-                print("Max retries reached (monolithic SRT); saving best result so far.")
+                print(f"Max retries reached ({retry_reason}); saving best result so far.")
             break
 
         with open(srt_fp, 'w', encoding='utf-8') as f:
